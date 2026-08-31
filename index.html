@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>バーコード管理</title>
+
+  <script src="https://unpkg.com/html5-qrcode"></script>
+</head>
+
+<body>
+  <h1>バーコード管理</h1>
+
+  <button onclick="startScanner()">📷 バーコードを読み取る</button>
+
+  <div id="reader" style="width: 300px; margin-top: 20px;"></div>
+
+  <p>
+    <input type="text" id="barcode" placeholder="バーコード番号">
+    <button onclick="addBarcode()">登録</button>
+  </p>
+
+  <h2>登録一覧</h2>
+  <ul id="list"></ul>
+
+  <script>
+    let scanner;
+
+    function startScanner() {
+      scanner = new Html5Qrcode("reader");
+
+      scanner.start(
+        { facingMode: "environment" },
+        {
+          fps: 10,
+          qrbox: { width: 250, height: 150 }
+        },
+        (decodedText) => {
+          document.getElementById("barcode").value = decodedText;
+
+          scanner.stop();
+        },
+        (errorMessage) => {
+          // 読み取り中のエラーは無視
+        }
+      ).catch((err) => {
+        alert("カメラを起動できませんでした: " + err);
+      });
+    }
+
+    function addBarcode() {
+      const input = document.getElementById("barcode");
+      const value = input.value.trim();
+
+      if (!value) return;
+
+      const li = document.createElement("li");
+      li.textContent = value;
+
+      document.getElementById("list").appendChild(li);
+
+      input.value = "";
+    }
+  </script>
+</body>
+</html>
