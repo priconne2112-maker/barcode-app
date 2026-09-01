@@ -3,64 +3,240 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>バーコード管理</title>
+  <title>在庫管理</title>
 
   <script src="https://unpkg.com/html5-qrcode"></script>
+
+  <style>
+    body {
+      font-family: sans-serif;
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    input, button {
+      font-size: 18px;
+      padding: 10px;
+      margin: 5px 0;
+    }
+
+    input {
+      width: 90%;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    .product {
+      border: 1px solid #ccc;
+      padding: 12px;
+      margin: 10px 0;
+      border-radius: 8px;
+    }
+
+    .product button {
+      font-size: 14px;
+      padding: 6px 10px;
+    }
+  </style>
 </head>
 
 <body>
-  <h1>バーコード管理</h1>
+
+  <h1>📦 在庫管理</h1>
 
   <button onclick="startScanner()">📷 バーコードを読み取る</button>
 
-  <div id="reader" style="width: 300px; margin-top: 20px;"></div>
+  <div id="reader" style="width:100%; margin-top:15px;"></div>
 
-  <p>
-    <input type="text" id="barcode" placeholder="バーコード番号">
-    <button onclick="addBarcode()">登録</button>
-  </p>
+  <hr>
 
-  <h2>登録一覧</h2>
-  <ul id="list"></ul>
+  <h2>商品登録</h2>
+
+  <label>バーコード</label><br>
+  <input type="text" id="barcode" placeholder="バーコード番号">
+
+  <br>
+
+  <label>商品名</label><br>
+  <input type="text" id="name" placeholder="商品名">
+
+  <br>
+
+  <label>在庫数</label><br>
+  <input type="number" id="stock" value="1" min="0">
+
+  <br>
+
+  <button onclick="addProduct()">商品を登録</button>
+
+  <h2>商品一覧</h2>
+
+  <div id="list"></div>
 
   <script>
-    let scanner;
+    let scanner = null;
+
+    // 保存されている商品を読み込む
+    let products = JSON.parse(localStorage.getItem("products")) || [];
+
+    displayProducts();
 
     function startScanner() {
+
+      if (scanner) {
+        return;
+      }
+
       scanner = new Html5Qrcode("reader");
 
       scanner.start(
         { facingMode: "environment" },
         {
           fps: 10,
-          qrbox: { width: 250, height: 150 }
+          qrbox: { width: 280, height: 150 }
         },
         (decodedText) => {
+
           document.getElementById("barcode").value = decodedText;
 
-          scanner.stop();
+          scanner.stop().then(() => {
+            scanner.clear();
+            scanner = null;
+          });
+
         },
         (errorMessage) => {
           // 読み取り中のエラーは無視
         }
-      ).catch((err) => {
-        alert("カメラを起動できませんでした: " + err);
+      ).catch((error) => {
+        alert("カメラを起動できませんでした。\n" + error);
+        scanner = null;
       });
     }
 
-    function addBarcode() {
-      const input = document.getElementById("barcode");
-      const value = input.value.trim();
+    function addProduct() {
 
-      if (!value) return;
+      const barcode = document.getElementById("barcode").value.trim();
+      const name = document.getElementById("name").value.trim();
+      const stock = Number(document.getElementById("stock").value);
 
-      const li = document.createElement("li");
-      li.textContent = value;
+      if (!barcode) {
+        alert("バーコードを入力してください");
+        return;
+      }
 
-      document.getElementById("list").appendChild(li);
+      if (!name) {
+        alert("商品名を入力してください");
+        return;
+      }
 
-      input.value = "";
+      // 同じバーコードがすでにあるか確認
+      const existing = products.find(product => product.barcode === barcode);
+
+      if (existing) {
+
+        existing.stock += stock;
+
+      } else {
+
+        products.push({
+          barcode: barcode,
+          name: name,
+          stock: stock
+        });
+
+      }
+
+      saveProducts();
+      displayProducts();
+
+      document.getElementById("barcode").value = "";
+      document.getElementById("name").value = "";
+      document.getElementById("stock").value = 1;
+    }
+
+    function changeStock(index, amount) {
+
+      products[index].stock += amount;
+
+      if (products[index].stock < 0) {
+        products[index].stock = 0;
+      }
+
+      saveProducts();
+      displayProducts();
+    }
+
+    function deleteProduct(index) {
+
+      if (!confirm("この商品を削除しますか？")) {
+        return;
+      }
+
+      products.splice(index, 1);
+
+      saveProducts();
+      displayProducts();
+    }
+
+    function saveProducts() {
+
+      localStorage.setItem(
+        "products",
+        JSON.stringify(products)
+      );
+    }
+
+    function displayProducts() {
+
+      const list = document.getElementById("list");
+
+      list.innerHTML = "";
+
+      if (products.length === 0) {
+        list.innerHTML = "<p>まだ商品がありません。</p>";
+        return;
+      }
+
+      products.forEach((product, index) => {
+
+        const div = document.createElement("div");
+
+        div.className = "product";
+
+        div.innerHTML = `
+          <strong>${escapeHtml(product.name)}</strong><br>
+          バーコード：${escapeHtml(product.barcode)}<br>
+          在庫：<strong>${product.stock}</strong>個<br>
+
+          <button onclick="changeStock(${index}, 1)">
+            ＋1
+          </button>
+
+          <button onclick="changeStock(${index}, -1)">
+            −1
+          </button>
+
+          <button onclick="deleteProduct(${index})">
+            削除
+          </button>
+        `;
+
+        list.appendChild(div);
+      });
+    }
+
+    function escapeHtml(text) {
+
+      const div = document.createElement("div");
+      div.textContent = text;
+
+      return div.innerHTML;
     }
   </script>
+
 </body>
 </html>
