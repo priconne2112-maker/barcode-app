@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>在庫管理</title>
+
+  <title>在庫管理 Ver.1.1</title>
 
   <script src="https://unpkg.com/html5-qrcode"></script>
 
@@ -23,6 +24,23 @@
 
     input {
       width: 90%;
+      box-sizing: border-box;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    .version {
+      color: #666;
+      font-size: 14px;
+      margin-bottom: 20px;
+    }
+
+    #status {
+      margin: 15px 0;
+      padding: 10px;
+      font-weight: bold;
     }
 
     .product {
@@ -32,10 +50,9 @@
       border-radius: 8px;
     }
 
-    #status {
-      margin: 15px 0;
-      padding: 10px;
-      font-weight: bold;
+    .product button {
+      font-size: 14px;
+      padding: 6px 10px;
     }
   </style>
 </head>
@@ -44,7 +61,9 @@
 
   <h1>📦 在庫管理</h1>
 
-  <p>🧪 GitHub更新テスト：成功！</p>
+  <div class="version">
+    在庫管理 Ver.1.1
+  </div>
 
   <button onclick="startScanner()">
     📷 バーコードを読み取る
@@ -61,17 +80,28 @@
   <h2>商品登録</h2>
 
   <label>バーコード</label><br>
-  <input id="barcode" placeholder="バーコード番号">
+  <input
+    id="barcode"
+    placeholder="バーコード番号"
+  >
 
   <br>
 
   <label>商品名</label><br>
-  <input id="name" placeholder="商品名">
+  <input
+    id="name"
+    placeholder="商品名"
+  >
 
   <br>
 
   <label>在庫数</label><br>
-  <input id="stock" type="number" value="1" min="0">
+  <input
+    id="stock"
+    type="number"
+    value="1"
+    min="0"
+  >
 
   <br>
 
@@ -86,402 +116,507 @@
 
 <script>
 
-let scanner = null;
+  let scanner = null;
 
-let products =
-  JSON.parse(localStorage.getItem("products")) || [];
+  let products =
+    JSON.parse(
+      localStorage.getItem("products")
+    ) || [];
 
-displayProducts();
+  displayProducts();
 
 
-/* =========================
-   バーコード読み取り
-========================= */
+  /*
+   * =========================
+   * バーコード読み取り
+   * =========================
+   */
 
-function startScanner() {
+  function startScanner() {
 
-  if (scanner) {
-    return;
-  }
-
-  document.getElementById("status").textContent =
-    "📷 カメラ起動中…";
-
-  scanner = new Html5Qrcode("reader");
-
-  scanner.start(
-    { facingMode: "environment" },
-
-    {
-      fps: 10,
-      qrbox: {
-        width: 280,
-        height: 150
-      }
-    },
-
-    async function(decodedText) {
-
-      // 読み取った番号を表示
-      document.getElementById("barcode").value =
-        decodedText;
-
-      document.getElementById("status").textContent =
-        "✅ 読み取り成功：" + decodedText;
-
-      await stopScanner();
-
-      // 商品情報を検索
-      lookupProduct(decodedText);
-    },
-
-    function(errorMessage) {
-      // 読み取り途中のエラーは無視
+    if (scanner) {
+      return;
     }
-
-  ).catch(function(error) {
 
     document.getElementById("status").textContent =
-      "❌ カメラを起動できませんでした";
+      "📷 カメラ起動中…";
 
-    scanner = null;
-
-    console.log(error);
-  });
-}
+    scanner =
+      new Html5Qrcode("reader");
 
 
-/* =========================
-   カメラ停止
-========================= */
+    scanner.start(
 
-async function stopScanner() {
+      { facingMode: "environment" },
 
-  if (!scanner) {
-    return;
-  }
+      {
+        fps: 10,
 
-  try {
-
-    await scanner.stop();
-    scanner.clear();
-
-  } catch (error) {
-
-    console.log(error);
-  }
-
-  scanner = null;
-}
+        qrbox: {
+          width: 280,
+          height: 150
+        }
+      },
 
 
-/* =========================
-   商品情報検索
-========================= */
+      function(decodedText) {
 
-async function lookupProduct(barcode) {
+        /*
+         * 読み取り成功
+         */
 
-  const status =
-    document.getElementById("status");
-
-  status.textContent =
-    "🔍 商品情報を検索中…";
+        document.getElementById("barcode").value =
+          decodedText;
 
 
-  try {
+        /*
+         * ここで画面表示を変更
+         */
 
-    const url =
-      "https://world.openfoodfacts.org/api/v3/product/"
-      + encodeURIComponent(barcode)
-      + "?lc=ja&cc=jp";
-
-
-    const response =
-      await fetch(url);
+        document.getElementById("status").textContent =
+          "🔍 商品情報を検索中…";
 
 
-    if (!response.ok) {
+        /*
+         * カメラ停止は待たない
+         *
+         * 先に商品検索を実行する
+         */
 
-      throw new Error(
-        "HTTP " + response.status
-      );
-    }
-
-
-    const data =
-      await response.json();
+        stopScanner();
 
 
-    console.log("API結果:", data);
+        lookupProduct(decodedText);
+
+      },
 
 
-    if (
-      data.status === 1 &&
-      data.product
-    ) {
+      function(errorMessage) {
 
-      const product =
-        data.product;
+        /*
+         * 読み取り途中のエラーは無視
+         */
 
-
-      const name =
-        product.product_name_ja ||
-        product.product_name ||
-        "";
-
-
-      if (name) {
-
-        document.getElementById("name").value =
-          name;
-
-        status.textContent =
-          "✅ 商品名を取得しました：" + name;
-
-      } else {
-
-        status.textContent =
-          "⚠️ 商品は見つかりましたが、商品名がありません";
       }
 
+    ).catch(function(error) {
 
-    } else {
+      document.getElementById("status").textContent =
+        "❌ カメラを起動できませんでした";
 
-      status.textContent =
-        "⚠️ このJANの商品情報は見つかりませんでした";
-    }
+      scanner = null;
 
+      console.log(error);
 
-  } catch (error) {
-
-    console.error(error);
-
-    status.textContent =
-      "❌ 商品情報の取得に失敗しました";
-  }
-}
-
-
-/* =========================
-   商品登録
-========================= */
-
-function addProduct() {
-
-  const barcode =
-    document.getElementById("barcode")
-      .value.trim();
-
-  const name =
-    document.getElementById("name")
-      .value.trim();
-
-  const stock =
-    Number(
-      document.getElementById("stock").value
-    );
-
-
-  if (!barcode) {
-
-    alert("バーコードを入力してください");
-    return;
-  }
-
-
-  if (!name) {
-
-    alert("商品名を入力してください");
-    return;
-  }
-
-
-  const existing =
-    products.find(
-      product =>
-        product.barcode === barcode
-    );
-
-
-  if (existing) {
-
-    existing.stock += stock;
-
-  } else {
-
-    products.push({
-
-      barcode: barcode,
-
-      name: name,
-
-      stock: stock
     });
   }
 
 
-  saveProducts();
+  /*
+   * =========================
+   * カメラ停止
+   * =========================
+   */
 
-  displayProducts();
+  async function stopScanner() {
 
-
-  document.getElementById("barcode").value = "";
-
-  document.getElementById("name").value = "";
-
-  document.getElementById("stock").value = 1;
-
-  document.getElementById("status").textContent =
-    "✅ 商品を登録しました";
-}
-
-
-/* =========================
-   在庫変更
-========================= */
-
-function changeStock(index, amount) {
-
-  products[index].stock += amount;
-
-
-  if (products[index].stock < 0) {
-
-    products[index].stock = 0;
-  }
-
-
-  saveProducts();
-
-  displayProducts();
-}
-
-
-/* =========================
-   商品削除
-========================= */
-
-function deleteProduct(index) {
-
-  if (
-    !confirm("この商品を削除しますか？")
-  ) {
-
-    return;
-  }
-
-
-  products.splice(index, 1);
-
-  saveProducts();
-
-  displayProducts();
-}
-
-
-/* =========================
-   保存
-========================= */
-
-function saveProducts() {
-
-  localStorage.setItem(
-    "products",
-    JSON.stringify(products)
-  );
-}
-
-
-/* =========================
-   商品一覧
-========================= */
-
-function displayProducts() {
-
-  const list =
-    document.getElementById("list");
-
-
-  list.innerHTML = "";
-
-
-  if (products.length === 0) {
-
-    list.innerHTML =
-      "<p>まだ商品がありません。</p>";
-
-    return;
-  }
-
-
-  products.forEach(
-    function(product, index) {
-
-      const div =
-        document.createElement("div");
-
-
-      div.className =
-        "product";
-
-
-      div.innerHTML = `
-
-        <strong>
-          ${escapeHtml(product.name)}
-        </strong>
-
-        <br>
-
-        JAN：
-        ${escapeHtml(product.barcode)}
-
-        <br>
-
-        在庫：
-        <strong>${product.stock}</strong>個
-
-        <br>
-
-        <button
-          onclick="changeStock(${index}, 1)"
-        >
-          ＋1
-        </button>
-
-        <button
-          onclick="changeStock(${index}, -1)"
-        >
-          −1
-        </button>
-
-        <button
-          onclick="deleteProduct(${index})"
-        >
-          削除
-        </button>
-      `;
-
-
-      list.appendChild(div);
+    if (!scanner) {
+      return;
     }
-  );
-}
+
+    const currentScanner = scanner;
+
+    scanner = null;
+
+    try {
+
+      await currentScanner.stop();
+
+      currentScanner.clear();
+
+    } catch (error) {
+
+      console.log("カメラ停止エラー:", error);
+
+    }
+  }
 
 
-/* =========================
-   HTMLエスケープ
-========================= */
+  /*
+   * =========================
+   * 商品情報検索
+   * =========================
+   */
 
-function escapeHtml(text) {
+  async function lookupProduct(barcode) {
 
-  const div =
-    document.createElement("div");
+    const status =
+      document.getElementById("status");
 
-  div.textContent = text;
 
-  return div.innerHTML;
-}
+    status.textContent =
+      "🔍 商品情報を検索中…";
+
+
+    try {
+
+      const url =
+        "https://world.openfoodfacts.org/api/v3/product/"
+        + encodeURIComponent(barcode)
+        + "?lc=ja&cc=jp";
+
+
+      const response =
+        await fetch(url);
+
+
+      if (!response.ok) {
+
+        throw new Error(
+          "HTTP " + response.status
+        );
+      }
+
+
+      const data =
+        await response.json();
+
+
+      console.log(
+        "API結果:",
+        data
+      );
+
+
+      /*
+       * 商品が見つかった
+       */
+
+      if (
+        data.status === 1 &&
+        data.product
+      ) {
+
+        const product =
+          data.product;
+
+
+        const name =
+          product.product_name_ja ||
+          product.product_name ||
+          "";
+
+
+        if (name) {
+
+          document.getElementById("name").value =
+            name;
+
+
+          status.textContent =
+            "✅ 商品名を取得しました";
+
+
+        } else {
+
+          status.textContent =
+            "⚠️ 商品は見つかりましたが商品名がありません";
+
+        }
+
+
+      } else {
+
+        status.textContent =
+          "⚠️ 商品情報が見つかりませんでした";
+
+      }
+
+
+    } catch (error) {
+
+      console.error(
+        "商品検索エラー:",
+        error
+      );
+
+
+      status.textContent =
+        "❌ 商品情報の取得に失敗しました";
+
+    }
+  }
+
+
+  /*
+   * =========================
+   * 商品登録
+   * =========================
+   */
+
+  function addProduct() {
+
+    const barcode =
+      document
+        .getElementById("barcode")
+        .value
+        .trim();
+
+
+    const name =
+      document
+        .getElementById("name")
+        .value
+        .trim();
+
+
+    const stock =
+      Number(
+        document
+          .getElementById("stock")
+          .value
+      );
+
+
+    if (!barcode) {
+
+      alert(
+        "バーコードを入力してください"
+      );
+
+      return;
+    }
+
+
+    if (!name) {
+
+      alert(
+        "商品名を入力してください"
+      );
+
+      return;
+    }
+
+
+    /*
+     * 同じJANがあるか確認
+     */
+
+    const existing =
+      products.find(
+        product =>
+          product.barcode === barcode
+      );
+
+
+    if (existing) {
+
+      existing.stock += stock;
+
+    } else {
+
+      products.push({
+
+        barcode: barcode,
+
+        name: name,
+
+        stock: stock
+
+      });
+
+    }
+
+
+    saveProducts();
+
+    displayProducts();
+
+
+    /*
+     * 入力欄をリセット
+     */
+
+    document.getElementById("barcode").value =
+      "";
+
+    document.getElementById("name").value =
+      "";
+
+    document.getElementById("stock").value =
+      1;
+
+
+    document.getElementById("status").textContent =
+      "✅ 商品を登録しました";
+  }
+
+
+  /*
+   * =========================
+   * 在庫増減
+   * =========================
+   */
+
+  function changeStock(index, amount) {
+
+    products[index].stock += amount;
+
+
+    if (products[index].stock < 0) {
+
+      products[index].stock = 0;
+
+    }
+
+
+    saveProducts();
+
+    displayProducts();
+  }
+
+
+  /*
+   * =========================
+   * 商品削除
+   * =========================
+   */
+
+  function deleteProduct(index) {
+
+    if (
+      !confirm(
+        "この商品を削除しますか？"
+      )
+    ) {
+
+      return;
+    }
+
+
+    products.splice(index, 1);
+
+    saveProducts();
+
+    displayProducts();
+  }
+
+
+  /*
+   * =========================
+   * 保存
+   * =========================
+   */
+
+  function saveProducts() {
+
+    localStorage.setItem(
+      "products",
+      JSON.stringify(products)
+    );
+  }
+
+
+  /*
+   * =========================
+   * 商品一覧表示
+   * =========================
+   */
+
+  function displayProducts() {
+
+    const list =
+      document.getElementById("list");
+
+
+    list.innerHTML = "";
+
+
+    if (products.length === 0) {
+
+      list.innerHTML =
+        "<p>まだ商品がありません。</p>";
+
+      return;
+    }
+
+
+    products.forEach(
+      function(product, index) {
+
+        const div =
+          document.createElement("div");
+
+
+        div.className =
+          "product";
+
+
+        div.innerHTML = `
+
+          <strong>
+            ${escapeHtml(product.name)}
+          </strong>
+
+          <br>
+
+          JAN：
+          ${escapeHtml(product.barcode)}
+
+          <br>
+
+          在庫：
+          <strong>
+            ${product.stock}
+          </strong>
+          個
+
+          <br>
+
+          <button
+            onclick="changeStock(${index}, 1)"
+          >
+            ＋1
+          </button>
+
+          <button
+            onclick="changeStock(${index}, -1)"
+          >
+            −1
+          </button>
+
+          <button
+            onclick="deleteProduct(${index})"
+          >
+            削除
+          </button>
+
+        `;
+
+
+        list.appendChild(div);
+
+      }
+    );
+  }
+
+
+  /*
+   * =========================
+   * HTMLエスケープ
+   * =========================
+   */
+
+  function escapeHtml(text) {
+
+    const div =
+      document.createElement("div");
+
+    div.textContent =
+      text;
+
+    return div.innerHTML;
+  }
 
 </script>
 
