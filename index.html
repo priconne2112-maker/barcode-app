@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <title>在庫管理 Ver.1.1</title>
+  <title>在庫管理 Ver.1.2</title>
 
   <script src="https://unpkg.com/html5-qrcode"></script>
 
@@ -41,6 +41,7 @@
       margin: 15px 0;
       padding: 10px;
       font-weight: bold;
+      white-space: pre-wrap;
     }
 
     .product {
@@ -62,7 +63,7 @@
   <h1>📦 在庫管理</h1>
 
   <div class="version">
-    在庫管理 Ver.1.1
+    在庫管理 Ver.1.2
   </div>
 
   <button onclick="startScanner()">
@@ -80,6 +81,7 @@
   <h2>商品登録</h2>
 
   <label>バーコード</label><br>
+
   <input
     id="barcode"
     placeholder="バーコード番号"
@@ -88,6 +90,7 @@
   <br>
 
   <label>商品名</label><br>
+
   <input
     id="name"
     placeholder="商品名"
@@ -96,6 +99,7 @@
   <br>
 
   <label>在庫数</label><br>
+
   <input
     id="stock"
     type="number"
@@ -115,6 +119,12 @@
 
 
 <script>
+
+  /*
+   * =========================
+   * 在庫データ
+   * =========================
+   */
 
   let scanner = null;
 
@@ -162,7 +172,7 @@
       function(decodedText) {
 
         /*
-         * 読み取り成功
+         * バーコード取得
          */
 
         document.getElementById("barcode").value =
@@ -170,7 +180,7 @@
 
 
         /*
-         * ここで画面表示を変更
+         * 検索開始を表示
          */
 
         document.getElementById("status").textContent =
@@ -179,12 +189,14 @@
 
         /*
          * カメラ停止は待たない
-         *
-         * 先に商品検索を実行する
          */
 
         stopScanner();
 
+
+        /*
+         * 商品情報検索
+         */
 
         lookupProduct(decodedText);
 
@@ -209,6 +221,7 @@
       console.log(error);
 
     });
+
   }
 
 
@@ -236,9 +249,13 @@
 
     } catch (error) {
 
-      console.log("カメラ停止エラー:", error);
+      console.log(
+        "カメラ停止エラー:",
+        error
+      );
 
     }
+
   }
 
 
@@ -258,25 +275,57 @@
       "🔍 商品情報を検索中…";
 
 
+    /*
+     * API URL
+     *
+     * 直接ブラウザで確認したものと同じ形式
+     */
+
+    const url =
+      "https://world.openfoodfacts.org/api/v3/product/"
+      + encodeURIComponent(barcode)
+      + ".json";
+
+
     try {
 
-      const url =
-        "https://world.openfoodfacts.org/api/v3/product/"
-        + encodeURIComponent(barcode)
-        + "?lc=ja&cc=jp";
+      console.log(
+        "API URL:",
+        url
+      );
 
+
+      /*
+       * APIへアクセス
+       */
 
       const response =
         await fetch(url);
 
 
+      console.log(
+        "HTTPステータス:",
+        response.status
+      );
+
+
+      /*
+       * HTTPエラー
+       */
+
       if (!response.ok) {
 
-        throw new Error(
-          "HTTP " + response.status
-        );
+        status.textContent =
+          "❌ APIエラー\nHTTP "
+          + response.status;
+
+        return;
       }
 
+
+      /*
+       * JSONとして読み込む
+       */
 
       const data =
         await response.json();
@@ -289,7 +338,7 @@
 
 
       /*
-       * 商品が見つかった
+       * 商品が存在する場合
        */
 
       if (
@@ -301,9 +350,14 @@
           data.product;
 
 
+        /*
+         * 商品名を取得
+         */
+
         const name =
           product.product_name_ja ||
           product.product_name ||
+          product.product_name_en ||
           "";
 
 
@@ -314,26 +368,36 @@
 
 
           status.textContent =
-            "✅ 商品名を取得しました";
+            "✅ 商品名を取得しました\n"
+            + name;
 
 
         } else {
 
           status.textContent =
-            "⚠️ 商品は見つかりましたが商品名がありません";
+            "⚠️ 商品は見つかりましたが、商品名が登録されていません";
 
         }
 
 
       } else {
 
+        /*
+         * 商品が登録されていない
+         */
+
         status.textContent =
-          "⚠️ 商品情報が見つかりませんでした";
+          "⚠️ このJANの商品情報は見つかりませんでした\n"
+          + "JAN：" + barcode;
 
       }
 
 
     } catch (error) {
+
+      /*
+       * 通信・JSON解析などのエラー
+       */
 
       console.error(
         "商品検索エラー:",
@@ -342,9 +406,11 @@
 
 
       status.textContent =
-        "❌ 商品情報の取得に失敗しました";
+        "❌ 商品情報の取得に失敗しました\n"
+        + error.message;
 
     }
+
   }
 
 
@@ -399,7 +465,7 @@
 
 
     /*
-     * 同じJANがあるか確認
+     * 同じJANが存在するか確認
      */
 
     const existing =
@@ -449,6 +515,7 @@
 
     document.getElementById("status").textContent =
       "✅ 商品を登録しました";
+
   }
 
 
@@ -473,6 +540,7 @@
     saveProducts();
 
     displayProducts();
+
   }
 
 
@@ -499,6 +567,7 @@
     saveProducts();
 
     displayProducts();
+
   }
 
 
@@ -514,6 +583,7 @@
       "products",
       JSON.stringify(products)
     );
+
   }
 
 
@@ -538,6 +608,7 @@
         "<p>まだ商品がありません。</p>";
 
       return;
+
     }
 
 
@@ -598,6 +669,7 @@
 
       }
     );
+
   }
 
 
@@ -616,6 +688,7 @@
       text;
 
     return div.innerHTML;
+
   }
 
 </script>
