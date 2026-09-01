@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <title>在庫管理 Ver.1.2</title>
+  <title>在庫管理 Ver.1.3</title>
 
   <script src="https://unpkg.com/html5-qrcode"></script>
 
@@ -63,7 +63,7 @@
   <h1>📦 在庫管理</h1>
 
   <div class="version">
-    在庫管理 Ver.1.2
+    在庫管理 Ver.1.3
   </div>
 
   <button onclick="startScanner()">
@@ -81,7 +81,6 @@
   <h2>商品登録</h2>
 
   <label>バーコード</label><br>
-
   <input
     id="barcode"
     placeholder="バーコード番号"
@@ -90,7 +89,6 @@
   <br>
 
   <label>商品名</label><br>
-
   <input
     id="name"
     placeholder="商品名"
@@ -99,7 +97,6 @@
   <br>
 
   <label>在庫数</label><br>
-
   <input
     id="stock"
     type="number"
@@ -180,7 +177,7 @@
 
 
         /*
-         * 検索開始を表示
+         * 検索開始
          */
 
         document.getElementById("status").textContent =
@@ -188,15 +185,11 @@
 
 
         /*
-         * カメラ停止は待たない
+         * カメラ停止を待たず検索
          */
 
         stopScanner();
 
-
-        /*
-         * 商品情報検索
-         */
 
         lookupProduct(decodedText);
 
@@ -262,6 +255,7 @@
   /*
    * =========================
    * 商品情報検索
+   * Open Food Facts API v3
    * =========================
    */
 
@@ -276,15 +270,14 @@
 
 
     /*
-     * API URL
+     * Open Food Facts v3
      *
-     * 直接ブラウザで確認したものと同じ形式
+     * バーコードをそのままURLに入れる
      */
 
     const url =
       "https://world.openfoodfacts.org/api/v3/product/"
-      + encodeURIComponent(barcode)
-      + ".json";
+      + encodeURIComponent(barcode);
 
 
     try {
@@ -294,10 +287,6 @@
         url
       );
 
-
-      /*
-       * APIへアクセス
-       */
 
       const response =
         await fetch(url);
@@ -310,21 +299,35 @@
 
 
       /*
-       * HTTPエラー
+       * 404 = 商品が登録されていない
        */
 
-      if (!response.ok) {
+      if (response.status === 404) {
 
         status.textContent =
-          "❌ APIエラー\nHTTP "
-          + response.status;
+          "⚠️ このJANの商品情報は登録されていません\n"
+          + "JAN：" + barcode;
 
         return;
       }
 
 
       /*
-       * JSONとして読み込む
+       * その他のHTTPエラー
+       */
+
+      if (!response.ok) {
+
+        status.textContent =
+          "❌ APIエラー\n"
+          + "HTTP " + response.status;
+
+        return;
+      }
+
+
+      /*
+       * JSON取得
        */
 
       const data =
@@ -338,11 +341,10 @@
 
 
       /*
-       * 商品が存在する場合
+       * v3では成功時にproductが返る
        */
 
       if (
-        data.status === 1 &&
         data.product
       ) {
 
@@ -351,7 +353,7 @@
 
 
         /*
-         * 商品名を取得
+         * 商品名候補
          */
 
         const name =
@@ -360,6 +362,10 @@
           product.product_name_en ||
           "";
 
+
+        /*
+         * 商品名が見つかった
+         */
 
         if (name) {
 
@@ -382,22 +388,13 @@
 
       } else {
 
-        /*
-         * 商品が登録されていない
-         */
-
         status.textContent =
-          "⚠️ このJANの商品情報は見つかりませんでした\n"
-          + "JAN：" + barcode;
+          "⚠️ 商品情報が見つかりませんでした";
 
       }
 
 
     } catch (error) {
-
-      /*
-       * 通信・JSON解析などのエラー
-       */
 
       console.error(
         "商品検索エラー:",
@@ -465,7 +462,7 @@
 
 
     /*
-     * 同じJANが存在するか確認
+     * 同じJANがあるか確認
      */
 
     const existing =
