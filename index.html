@@ -25,10 +25,6 @@
       width: 90%;
     }
 
-    button {
-      cursor: pointer;
-    }
-
     .product {
       border: 1px solid #ccc;
       padding: 12px;
@@ -37,7 +33,8 @@
     }
 
     #status {
-      margin: 10px 0;
+      margin: 15px 0;
+      padding: 10px;
       font-weight: bold;
     }
   </style>
@@ -49,11 +46,15 @@
 
   <p>🧪 GitHub更新テスト：成功！</p>
 
-  <button onclick="startScanner()">📷 バーコードを読み取る</button>
+  <button onclick="startScanner()">
+    📷 バーコードを読み取る
+  </button>
 
   <div id="reader" style="width:100%; margin-top:15px;"></div>
 
-  <div id="status"></div>
+  <div id="status">
+    待機中
+  </div>
 
   <hr>
 
@@ -74,222 +75,415 @@
 
   <br>
 
-  <button onclick="addProduct()">商品を登録</button>
+  <button onclick="addProduct()">
+    商品を登録
+  </button>
 
   <h2>商品一覧</h2>
 
   <div id="list"></div>
 
-  <script>
 
-    let scanner = null;
+<script>
 
-    let products =
-      JSON.parse(localStorage.getItem("products")) || [];
+let scanner = null;
 
-    displayProducts();
+let products =
+  JSON.parse(localStorage.getItem("products")) || [];
+
+displayProducts();
 
 
-    function startScanner() {
+/* =========================
+   バーコード読み取り
+========================= */
 
-      if (scanner) return;
+function startScanner() {
 
-      scanner = new Html5Qrcode("reader");
+  if (scanner) {
+    return;
+  }
 
-      scanner.start(
-        { facingMode: "environment" },
-        {
-          fps: 10,
-          qrbox: {
-            width: 280,
-            height: 150
-          }
-        },
+  document.getElementById("status").textContent =
+    "📷 カメラ起動中…";
 
-        async (decodedText) => {
+  scanner = new Html5Qrcode("reader");
 
-          document.getElementById("barcode").value =
-            decodedText;
+  scanner.start(
+    { facingMode: "environment" },
 
-          document.getElementById("status").textContent =
-            "✅ 読み取り成功： " + decodedText;
+    {
+      fps: 10,
+      qrbox: {
+        width: 280,
+        height: 150
+      }
+    },
 
-          await stopScanner();
-        },
+    async function(decodedText) {
 
-        () => {
-          // 読み取り中のエラーは無視
-        }
+      // 読み取った番号を表示
+      document.getElementById("barcode").value =
+        decodedText;
 
-      ).catch(error => {
+      document.getElementById("status").textContent =
+        "✅ 読み取り成功：" + decodedText;
 
-        alert(
-          "カメラを起動できませんでした。\n" +
-          error
-        );
+      await stopScanner();
 
-        scanner = null;
-      });
+      // 商品情報を検索
+      lookupProduct(decodedText);
+    },
+
+    function(errorMessage) {
+      // 読み取り途中のエラーは無視
     }
 
+  ).catch(function(error) {
 
-    async function stopScanner() {
+    document.getElementById("status").textContent =
+      "❌ カメラを起動できませんでした";
 
-      if (!scanner) return;
+    scanner = null;
 
-      try {
-        await scanner.stop();
-        scanner.clear();
-      } catch (e) {
-        console.log(e);
-      }
-
-      scanner = null;
-    }
+    console.log(error);
+  });
+}
 
 
-    function addProduct() {
+/* =========================
+   カメラ停止
+========================= */
 
-      const barcode =
-        document.getElementById("barcode").value.trim();
+async function stopScanner() {
 
-      const name =
-        document.getElementById("name").value.trim();
+  if (!scanner) {
+    return;
+  }
 
-      const stock =
-        Number(
-          document.getElementById("stock").value
-        );
+  try {
 
-      if (!barcode) {
-        alert("バーコードを入力してください");
-        return;
-      }
+    await scanner.stop();
+    scanner.clear();
 
-      if (!name) {
-        alert("商品名を入力してください");
-        return;
-      }
+  } catch (error) {
 
-      const existing =
-        products.find(
-          product => product.barcode === barcode
-        );
+    console.log(error);
+  }
 
-      if (existing) {
-
-        existing.stock += stock;
-
-      } else {
-
-        products.push({
-          barcode: barcode,
-          name: name,
-          stock: stock
-        });
-      }
-
-      saveProducts();
-      displayProducts();
-
-      document.getElementById("barcode").value = "";
-      document.getElementById("name").value = "";
-      document.getElementById("stock").value = 1;
-      document.getElementById("status").textContent = "";
-    }
+  scanner = null;
+}
 
 
-    function changeStock(index, amount) {
+/* =========================
+   商品情報検索
+========================= */
 
-      products[index].stock += amount;
+async function lookupProduct(barcode) {
 
-      if (products[index].stock < 0) {
-        products[index].stock = 0;
-      }
+  const status =
+    document.getElementById("status");
 
-      saveProducts();
-      displayProducts();
-    }
-
-
-    function deleteProduct(index) {
-
-      if (!confirm("この商品を削除しますか？")) {
-        return;
-      }
-
-      products.splice(index, 1);
-
-      saveProducts();
-      displayProducts();
-    }
+  status.textContent =
+    "🔍 商品情報を検索中…";
 
 
-    function saveProducts() {
+  try {
 
-      localStorage.setItem(
-        "products",
-        JSON.stringify(products)
+    const url =
+      "https://world.openfoodfacts.org/api/v3/product/"
+      + encodeURIComponent(barcode)
+      + "?lc=ja&cc=jp";
+
+
+    const response =
+      await fetch(url);
+
+
+    if (!response.ok) {
+
+      throw new Error(
+        "HTTP " + response.status
       );
     }
 
 
-    function displayProducts() {
+    const data =
+      await response.json();
 
-      const list =
-        document.getElementById("list");
 
-      list.innerHTML = "";
+    console.log("API結果:", data);
 
-      if (products.length === 0) {
 
-        list.innerHTML =
-          "<p>まだ商品がありません。</p>";
+    if (
+      data.status === 1 &&
+      data.product
+    ) {
 
-        return;
+      const product =
+        data.product;
+
+
+      const name =
+        product.product_name_ja ||
+        product.product_name ||
+        "";
+
+
+      if (name) {
+
+        document.getElementById("name").value =
+          name;
+
+        status.textContent =
+          "✅ 商品名を取得しました：" + name;
+
+      } else {
+
+        status.textContent =
+          "⚠️ 商品は見つかりましたが、商品名がありません";
       }
 
-      products.forEach((product, index) => {
 
-        const div =
-          document.createElement("div");
+    } else {
 
-        div.className = "product";
-
-        div.innerHTML = `
-          <strong>${escapeHtml(product.name)}</strong><br>
-          JAN：${escapeHtml(product.barcode)}<br>
-          在庫：<strong>${product.stock}</strong>個<br>
-
-          <button onclick="changeStock(${index}, 1)">
-            ＋1
-          </button>
-
-          <button onclick="changeStock(${index}, -1)">
-            −1
-          </button>
-
-          <button onclick="deleteProduct(${index})">
-            削除
-          </button>
-        `;
-
-        list.appendChild(div);
-      });
+      status.textContent =
+        "⚠️ このJANの商品情報は見つかりませんでした";
     }
 
 
-    function escapeHtml(text) {
+  } catch (error) {
+
+    console.error(error);
+
+    status.textContent =
+      "❌ 商品情報の取得に失敗しました";
+  }
+}
+
+
+/* =========================
+   商品登録
+========================= */
+
+function addProduct() {
+
+  const barcode =
+    document.getElementById("barcode")
+      .value.trim();
+
+  const name =
+    document.getElementById("name")
+      .value.trim();
+
+  const stock =
+    Number(
+      document.getElementById("stock").value
+    );
+
+
+  if (!barcode) {
+
+    alert("バーコードを入力してください");
+    return;
+  }
+
+
+  if (!name) {
+
+    alert("商品名を入力してください");
+    return;
+  }
+
+
+  const existing =
+    products.find(
+      product =>
+        product.barcode === barcode
+    );
+
+
+  if (existing) {
+
+    existing.stock += stock;
+
+  } else {
+
+    products.push({
+
+      barcode: barcode,
+
+      name: name,
+
+      stock: stock
+    });
+  }
+
+
+  saveProducts();
+
+  displayProducts();
+
+
+  document.getElementById("barcode").value = "";
+
+  document.getElementById("name").value = "";
+
+  document.getElementById("stock").value = 1;
+
+  document.getElementById("status").textContent =
+    "✅ 商品を登録しました";
+}
+
+
+/* =========================
+   在庫変更
+========================= */
+
+function changeStock(index, amount) {
+
+  products[index].stock += amount;
+
+
+  if (products[index].stock < 0) {
+
+    products[index].stock = 0;
+  }
+
+
+  saveProducts();
+
+  displayProducts();
+}
+
+
+/* =========================
+   商品削除
+========================= */
+
+function deleteProduct(index) {
+
+  if (
+    !confirm("この商品を削除しますか？")
+  ) {
+
+    return;
+  }
+
+
+  products.splice(index, 1);
+
+  saveProducts();
+
+  displayProducts();
+}
+
+
+/* =========================
+   保存
+========================= */
+
+function saveProducts() {
+
+  localStorage.setItem(
+    "products",
+    JSON.stringify(products)
+  );
+}
+
+
+/* =========================
+   商品一覧
+========================= */
+
+function displayProducts() {
+
+  const list =
+    document.getElementById("list");
+
+
+  list.innerHTML = "";
+
+
+  if (products.length === 0) {
+
+    list.innerHTML =
+      "<p>まだ商品がありません。</p>";
+
+    return;
+  }
+
+
+  products.forEach(
+    function(product, index) {
 
       const div =
         document.createElement("div");
 
-      div.textContent = text;
 
-      return div.innerHTML;
+      div.className =
+        "product";
+
+
+      div.innerHTML = `
+
+        <strong>
+          ${escapeHtml(product.name)}
+        </strong>
+
+        <br>
+
+        JAN：
+        ${escapeHtml(product.barcode)}
+
+        <br>
+
+        在庫：
+        <strong>${product.stock}</strong>個
+
+        <br>
+
+        <button
+          onclick="changeStock(${index}, 1)"
+        >
+          ＋1
+        </button>
+
+        <button
+          onclick="changeStock(${index}, -1)"
+        >
+          −1
+        </button>
+
+        <button
+          onclick="deleteProduct(${index})"
+        >
+          削除
+        </button>
+      `;
+
+
+      list.appendChild(div);
     }
+  );
+}
 
-  </script>
+
+/* =========================
+   HTMLエスケープ
+========================= */
+
+function escapeHtml(text) {
+
+  const div =
+    document.createElement("div");
+
+  div.textContent = text;
+
+  return div.innerHTML;
+}
+
+</script>
 
 </body>
 </html>
