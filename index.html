@@ -11,7 +11,7 @@
     body {
       font-family: sans-serif;
       max-width: 600px;
-      margin: 0 auto;
+      margin: auto;
       padding: 20px;
     }
 
@@ -25,10 +25,6 @@
       width: 90%;
     }
 
-    button {
-      cursor: pointer;
-    }
-
     .product {
       border: 1px solid #ccc;
       padding: 12px;
@@ -36,207 +32,366 @@
       border-radius: 8px;
     }
 
-    .product button {
-      font-size: 14px;
-      padding: 6px 10px;
+    #status {
+      margin: 10px 0;
+      font-weight: bold;
     }
   </style>
 </head>
 
 <body>
 
-  <h1>📦 在庫管理</h1>
+<h1>📦 在庫管理</h1>
 
-  <button onclick="startScanner()">📷 バーコードを読み取る</button>
+<button onclick="startScanner()">📷 バーコードを読み取る</button>
 
-  <div id="reader" style="width:100%; margin-top:15px;"></div>
+<div id="reader" style="width:100%; margin-top:15px;"></div>
 
-  <hr>
+<div id="status"></div>
 
-  <h2>商品登録</h2>
+<hr>
 
-  <label>バーコード</label><br>
-  <input type="text" id="barcode" placeholder="バーコード番号">
+<h2>商品登録</h2>
 
-  <br>
+<label>バーコード</label><br>
+<input id="barcode" placeholder="バーコード番号">
 
-  <label>商品名</label><br>
-  <input type="text" id="name" placeholder="商品名">
+<br>
 
-  <br>
+<label>商品名</label><br>
+<input id="name" placeholder="商品名">
 
-  <label>在庫数</label><br>
-  <input type="number" id="stock" value="1" min="0">
+<br>
 
-  <br>
+<label>在庫数</label><br>
+<input id="stock" type="number" value="1" min="0">
 
-  <button onclick="addProduct()">商品を登録</button>
+<br>
 
-  <h2>商品一覧</h2>
+<button onclick="addProduct()">商品を登録</button>
 
-  <div id="list"></div>
+<h2>商品一覧</h2>
 
-  <script>
-    let scanner = null;
+<div id="list"></div>
 
-    // 保存されている商品を読み込む
-    let products = JSON.parse(localStorage.getItem("products")) || [];
+<script>
 
-    displayProducts();
+let scanner = null;
 
-    function startScanner() {
+let products =
+  JSON.parse(localStorage.getItem("products")) || [];
 
-      if (scanner) {
-        return;
+displayProducts();
+
+
+/* -------------------------
+   バーコード読み取り
+------------------------- */
+
+function startScanner() {
+
+  if (scanner) return;
+
+  scanner = new Html5Qrcode("reader");
+
+  scanner.start(
+    { facingMode: "environment" },
+
+    {
+      fps: 10,
+      qrbox: {
+        width: 280,
+        height: 150
       }
+    },
 
-      scanner = new Html5Qrcode("reader");
+async (decodedText) => {
 
-      scanner.start(
-        { facingMode: "environment" },
-        {
-          fps: 10,
-          qrbox: { width: 280, height: 150 }
-        },
-        (decodedText) => {
+  document.getElementById("barcode").value = decodedText;
 
-          document.getElementById("barcode").value = decodedText;
+  document.getElementById("status").textContent =
+    "✅ 読み取り成功： " + decodedText;
 
-          scanner.stop().then(() => {
-            scanner.clear();
-            scanner = null;
-          });
+  await stopScanner();
 
-        },
-        (errorMessage) => {
-          // 読み取り中のエラーは無視
-        }
-      ).catch((error) => {
-        alert("カメラを起動できませんでした。\n" + error);
-        scanner = null;
-      });
+},
+
+    () => {
+      // 読み取り中のエラーは無視
     }
 
-    function addProduct() {
+  ).catch(error => {
 
-      const barcode = document.getElementById("barcode").value.trim();
-      const name = document.getElementById("name").value.trim();
-      const stock = Number(document.getElementById("stock").value);
+    alert(
+      "カメラを起動できませんでした。\n" +
+      error
+    );
 
-      if (!barcode) {
-        alert("バーコードを入力してください");
-        return;
-      }
+    scanner = null;
+  });
+}
 
-      if (!name) {
-        alert("商品名を入力してください");
-        return;
-      }
 
-      // 同じバーコードがすでにあるか確認
-      const existing = products.find(product => product.barcode === barcode);
+/* -------------------------
+   カメラ停止
+------------------------- */
 
-      if (existing) {
+async function stopScanner() {
 
-        existing.stock += stock;
+  if (!scanner) return;
+
+  try {
+    await scanner.stop();
+    scanner.clear();
+  } catch (e) {
+    console.log(e);
+  }
+
+  scanner = null;
+}
+
+
+/* -------------------------
+   商品情報検索
+------------------------- */
+
+async function lookupProduct(barcode) {
+
+  const status =
+    document.getElementById("status");
+
+  status.textContent =
+    "🔍 商品情報を検索しています…";
+
+  try {
+
+    const url =
+      `https://world.openfoodfacts.org/api/v3/product/${encodeURIComponent(barcode)}.json`;
+
+    const response =
+      await fetch(url);
+
+    if (!response.ok) {
+      throw new Error("APIエラー");
+    }
+
+    const data =
+      await response.json();
+
+    if (
+      data.status === 1 &&
+      data.product
+    ) {
+
+      const product =
+        data.product;
+
+      // 商品名候補
+      const name =
+        product.product_name_ja ||
+        product.product_name ||
+        product.product_name_en ||
+        "";
+
+      if (name) {
+
+        document.getElementById("name").value =
+          name;
+
+        status.textContent =
+          "✅ 商品情報を取得しました";
 
       } else {
 
-        products.push({
-          barcode: barcode,
-          name: name,
-          stock: stock
-        });
-
+        status.textContent =
+          "⚠️ 商品は見つかりましたが商品名がありません。手入力してください。";
       }
 
-      saveProducts();
-      displayProducts();
+    } else {
 
-      document.getElementById("barcode").value = "";
-      document.getElementById("name").value = "";
-      document.getElementById("stock").value = 1;
+      status.textContent =
+        "⚠️ 商品情報が見つかりませんでした。商品名を手入力してください。";
     }
 
-    function changeStock(index, amount) {
+  } catch (error) {
 
-      products[index].stock += amount;
+    console.error(error);
 
-      if (products[index].stock < 0) {
-        products[index].stock = 0;
-      }
+    status.textContent =
+      "⚠️ 商品情報を取得できませんでした。商品名を手入力してください。";
+  }
+}
 
-      saveProducts();
-      displayProducts();
-    }
 
-    function deleteProduct(index) {
+/* -------------------------
+   商品登録
+------------------------- */
 
-      if (!confirm("この商品を削除しますか？")) {
-        return;
-      }
+function addProduct() {
 
-      products.splice(index, 1);
+  const barcode =
+    document.getElementById("barcode")
+      .value.trim();
 
-      saveProducts();
-      displayProducts();
-    }
+  const name =
+    document.getElementById("name")
+      .value.trim();
 
-    function saveProducts() {
+  const stock =
+    Number(
+      document.getElementById("stock").value
+    );
 
-      localStorage.setItem(
-        "products",
-        JSON.stringify(products)
-      );
-    }
+  if (!barcode) {
+    alert("バーコードを入力してください");
+    return;
+  }
 
-    function displayProducts() {
+  if (!name) {
+    alert("商品名を入力してください");
+    return;
+  }
 
-      const list = document.getElementById("list");
+  const existing =
+    products.find(
+      product =>
+        product.barcode === barcode
+    );
 
-      list.innerHTML = "";
+  if (existing) {
 
-      if (products.length === 0) {
-        list.innerHTML = "<p>まだ商品がありません。</p>";
-        return;
-      }
+    existing.stock += stock;
 
-      products.forEach((product, index) => {
+  } else {
 
-        const div = document.createElement("div");
+    products.push({
+      barcode,
+      name,
+      stock
+    });
+  }
 
-        div.className = "product";
+  saveProducts();
+  displayProducts();
 
-        div.innerHTML = `
-          <strong>${escapeHtml(product.name)}</strong><br>
-          バーコード：${escapeHtml(product.barcode)}<br>
-          在庫：<strong>${product.stock}</strong>個<br>
+  document.getElementById("barcode").value = "";
+  document.getElementById("name").value = "";
+  document.getElementById("stock").value = 1;
+  document.getElementById("status").textContent = "";
+}
 
-          <button onclick="changeStock(${index}, 1)">
-            ＋1
-          </button>
 
-          <button onclick="changeStock(${index}, -1)">
-            −1
-          </button>
+/* -------------------------
+   在庫増減
+------------------------- */
 
-          <button onclick="deleteProduct(${index})">
-            削除
-          </button>
-        `;
+function changeStock(index, amount) {
 
-        list.appendChild(div);
-      });
-    }
+  products[index].stock += amount;
 
-    function escapeHtml(text) {
+  if (products[index].stock < 0) {
+    products[index].stock = 0;
+  }
 
-      const div = document.createElement("div");
-      div.textContent = text;
+  saveProducts();
+  displayProducts();
+}
 
-      return div.innerHTML;
-    }
-  </script>
+
+/* -------------------------
+   商品削除
+------------------------- */
+
+function deleteProduct(index) {
+
+  if (!confirm("この商品を削除しますか？")) {
+    return;
+  }
+
+  products.splice(index, 1);
+
+  saveProducts();
+  displayProducts();
+}
+
+
+/* -------------------------
+   保存
+------------------------- */
+
+function saveProducts() {
+
+  localStorage.setItem(
+    "products",
+    JSON.stringify(products)
+  );
+}
+
+
+/* -------------------------
+   一覧表示
+------------------------- */
+
+function displayProducts() {
+
+  const list =
+    document.getElementById("list");
+
+  list.innerHTML = "";
+
+  if (products.length === 0) {
+
+    list.innerHTML =
+      "<p>まだ商品がありません。</p>";
+
+    return;
+  }
+
+  products.forEach((product, index) => {
+
+    const div =
+      document.createElement("div");
+
+    div.className = "product";
+
+    div.innerHTML = `
+      <strong>${escapeHtml(product.name)}</strong><br>
+      JAN：${escapeHtml(product.barcode)}<br>
+      在庫：<strong>${product.stock}</strong>個<br>
+
+      <button onclick="changeStock(${index}, 1)">
+        ＋1
+      </button>
+
+      <button onclick="changeStock(${index}, -1)">
+        −1
+      </button>
+
+      <button onclick="deleteProduct(${index})">
+        削除
+      </button>
+    `;
+
+    list.appendChild(div);
+  });
+}
+
+
+/* -------------------------
+   HTMLエスケープ
+------------------------- */
+
+function escapeHtml(text) {
+
+  const div =
+    document.createElement("div");
+
+  div.textContent = text;
+
+  return div.innerHTML;
+}
+
+</script>
 
 </body>
 </html>
