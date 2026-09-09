@@ -59,7 +59,7 @@
     .btn { flex: 1; padding: 10px; border: none; border-radius: 6px; background: #3498db; color: #fff; font-size: 0.95rem; font-weight: bold; cursor: pointer; }
     .btn:disabled { background: #bdc3c7; }
 
-    /* モーダル (辞書未登録時の入力画面) */
+    /* モーダル (辞書未登録時・手動調整入力画面) */
     .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 100; }
     .modal-content { background: #fff; padding: 20px; border-radius: 12px; width: 85%; max-width: 400px; }
     .modal-content h3 { margin-bottom: 10px; font-size: 1.1rem; }
@@ -74,6 +74,15 @@
     .stock-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #eee; }
     .stock-item .name { font-weight: bold; font-size: 1rem; color: #2c3e50; }
     .stock-item .count { font-weight: bold; font-size: 1.1rem; color: #2980b9; background: #ebf5fb; padding: 4px 12px; border-radius: 12px; }
+    
+    /* 手動調整モード時のスタイル設定 */
+    .stock-list.edit-mode .stock-item .count {
+      cursor: pointer;
+      background: #f39c12;
+      color: #fff;
+      box-shadow: 0 0 0 2px #e67e22;
+      animation: pulse 1.5s infinite;
+    }
   </style>
 </head>
 <body>
@@ -90,7 +99,7 @@
   <!-- カメラ描画エリア -->
   <div id="interactive">
     <video id="video" playsinline></video>
-    <!-- 赤枠ガイドを追加 -->
+    <!-- 赤枠ガイド -->
     <div class="scan-guide">
       <div class="scan-guide-box">
         <div class="scan-guide-line"></div>
@@ -101,7 +110,7 @@
   <!-- 操作ボタン -->
   <div class="btn-group">
     <button id="cameraToggleBtn" class="btn" onclick="toggleCamera()" style="background:#2c3e50;">カメラ起動</button>
-    <button class="btn" onclick="fetchStockList()">在庫一覧を更新</button>
+    <button id="manualEditBtn" class="btn" onclick="toggleManualEditMode()" style="background:#f39c12;">在庫手動操作</button>
   </div>
 
   <!-- ステータス表示 -->
@@ -130,6 +139,19 @@
   </div>
 </div>
 
+<!-- 在庫手動調整用のモーダル画面 -->
+<div id="manualEditModal" class="modal">
+  <div class="modal-content">
+    <h3>在庫数の手動調整</h3>
+    <p>商品名: <span id="editProductName" style="font-weight:bold;"></span></p>
+    <input type="number" id="editStockCount" placeholder="新しい個数を入力" min="0">
+    <div class="modal-btn-group">
+      <button class="btn modal-btn-cancel" onclick="closeManualEditModal()">キャンセル</button>
+      <button class="btn" onclick="submitManualStock()" style="background:#f39c12;">個数を変更</button>
+    </div>
+  </div>
+</div>
+
 <script>
   // ★ご自身のGAS WebアプリURLを設定してください
   const GAS_URL = "https://script.google.com/macros/s/AKfycbxIY1NMn3ry3EOdP4olMb7d0SIJx2nr58l25k7u7J-ZfpRUZfy6FbgwAOaVhcaf7qKG/exec";
@@ -138,7 +160,9 @@
   let codeReader = null;
   let isScanning = false;
   let isProcessing = false;
+  let isManualEditMode = false;
   let currentUnregisteredBarcode = "";
+  let targetEditBarcode = "";
 
   window.addEventListener('load', () => {
     fetchStockList();
@@ -170,7 +194,6 @@
     const videoHeight = videoElem.videoHeight || videoElem.clientHeight;
     if (!videoWidth || !videoHeight) return true;
 
-    // ガイド枠の比率（幅70%、高さ45%）
     const boxWidthRatio = 0.70;
     const boxHeightRatio = 0.45;
 
@@ -179,7 +202,6 @@
     const minY = videoHeight * (1 - boxHeightRatio) / 2;
     const maxY = videoHeight * (1 + boxHeightRatio) / 2;
 
-    // 検出されたすべての点が枠内に収まっているかチェック
     return result.resultPoints.every(point => {
       const x = point.x;
       const y = point.y;
@@ -199,7 +221,6 @@
 
     codeReader.decodeFromVideoDevice(undefined, 'video', (result, err) => {
       if (result && !isProcessing) {
-        // 赤枠の中に入っている場合のみ読み取る
         if (isResultInGuideBox(result, videoElem)) {
           isProcessing = true;
           const barcode = result.text;
@@ -290,7 +311,6 @@
     document.getElementById('resultMessage').innerText = "スキャンをキャンセルしました";
     document.getElementById('resultMessage').style.color = "#7f8c8d";
     currentUnregisteredBarcode = "";
-    // 次のスキャンを受け付けられるように復帰
     setTimeout(() => { isProcessing = false; }, 1000);
   }
 
@@ -334,6 +354,81 @@
     });
   }
 
+  // ★ 手動操作モードの切り替え
+  function toggleManualEditMode() {
+    isManualEditMode = !isManualEditMode;
+    const btn = document.getElementById('manualEditBtn');
+    const area = document.getElementById('stockListArea');
+
+    if (isManualEditMode) {
+      btn.innerText = "調整完了";
+      btn.style.background = "#e67e22";
+      area.classList.add('edit-mode');
+      document.getElementById('resultMessage').innerText = "オレンジの個数をタップして変更できます";
+      document.getElementById('resultMessage').style.color = "#e67e22";
+    } else {
+      btn.innerText = "在庫手動操作";
+      btn.style.background = "#f39c12";
+      area.classList.remove('edit-mode');
+      document.getElementById('resultMessage').innerText = "";
+    }
+  }
+
+  // 手動調整用モーダルを開く
+  function openManualEditModal(barcode, name, currentStock) {
+    if (!isManualEditMode) return; // 手動モード時のみ動作
+    targetEditBarcode = barcode;
+    document.getElementById('editProductName').innerText = name;
+    document.getElementById('editStockCount').value = currentStock;
+    document.getElementById('manualEditModal').style.display = "flex";
+  }
+
+  // 手動調整用モーダルを閉じる
+  function closeManualEditModal() {
+    document.getElementById('manualEditModal').style.display = "none";
+    targetEditBarcode = "";
+  }
+
+  // 手動調整データをスプレッドシート（GAS）へ送信
+  function submitManualStock() {
+    const newStock = document.getElementById('editStockCount').value;
+    if (newStock === "" || isNaN(newStock) || Number(newStock) < 0) {
+      alert("正しい個数を入力してください");
+      return;
+    }
+
+    closeManualEditModal();
+    document.getElementById('resultMessage').innerText = "個数を更新中...";
+    document.getElementById('resultMessage').style.color = "#7f8c8d";
+
+    fetch(GAS_URL, {
+      method: "POST",
+      mode: "cors",
+      headers: { "Content-Type": "text/plain" },
+      body: JSON.stringify({
+        action: "manualUpdate",
+        barcode: targetEditBarcode,
+        stock: Number(newStock)
+      })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) {
+        document.getElementById('resultMessage').innerText = `【${data.name}】の在庫を ${data.stock} 個に調整しました`;
+        document.getElementById('resultMessage').style.color = "#27ae60";
+        fetchStockList();
+      } else {
+        document.getElementById('resultMessage').innerText = "更新に失敗しました";
+        document.getElementById('resultMessage').style.color = "#e74c3c";
+      }
+    })
+    .catch(err => {
+      console.error(err);
+      document.getElementById('resultMessage').innerText = "更新エラーが発生しました";
+      document.getElementById('resultMessage').style.color = "#e74c3c";
+    });
+  }
+
   // 在庫一覧の取得と描画
   function fetchStockList() {
     fetch(GAS_URL)
@@ -347,7 +442,7 @@
             div.className = 'stock-item';
             div.innerHTML = `
               <span class="name">${item.name}</span>
-              <span class="count">${item.stock} 個</span>
+              <span class="count" onclick="openManualEditModal('${item.barcode}', '${item.name}', ${item.stock})">${item.stock} 個</span>
             `;
             area.appendChild(div);
           });
