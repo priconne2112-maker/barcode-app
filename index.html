@@ -116,7 +116,7 @@
   <p>バーコード: <strong id="target-barcode"></strong></p>
   <label>商品名を入力して辞書登録してください</label><br>
   <input id="reg-name" placeholder="例: お茶 500ml"><br>
-  <button class="btn-main" onclick="registerProduct()">辞書に保存</button>
+  <button class="btn-main" onclick="registerProduct()">辞書に保存して処理</button>
 </div>
 
 <hr>
@@ -129,7 +129,7 @@
 <script>
 
 // ★取得したGASのWebアプリURLを以下に貼り付けてください
-const GAS_URL = "https://script.google.com/macros/s/AKfycbxIY1NMn3ry3EOdP4olMb7d0SIJx2nr58l25k7u7J-ZfpRUZfy6FbgwAOaVhcaf7qKG/exec";
+const GAS_URL = "ここにWebアプリURLを貼り付け";
 
 let scanner = null;
 let currentMode = "in";
@@ -236,7 +236,7 @@ function handleScan(barcode) {
 }
 
 /* -------------------------
-   辞書への新規登録処理
+   辞書への新規登録＆同時に在庫更新処理
 ------------------------- */
 function registerProduct() {
   const name = document.getElementById("reg-name").value.trim();
@@ -245,23 +245,25 @@ function registerProduct() {
     return;
   }
 
-  setStatus("⏳ 辞書に登録中…");
+  setStatus("⏳ 辞書登録と在庫更新を実行中…");
 
   fetch(GAS_URL, {
     method: "POST",
     body: JSON.stringify({
-      action: "register",
+      action: "registerAndScan",
       barcode: pendingBarcode,
-      name: name
+      name: name,
+      mode: currentMode
     })
   })
   .then(res => res.json())
   .then(data => {
     if (data.success) {
-      alert("✅ 辞書に登録しました！もう一度バーコードを読み取ってください。");
+      const actionText = data.mode === "in" ? "【入庫 +1】" : "【出庫 -1】";
+      setStatus(`✅ 辞書登録完了！ ${actionText} ${data.name}（現在の在庫: ${data.stock}個）`);
       document.getElementById("reg-box").style.display = "none";
       document.getElementById("reg-name").value = "";
-      setStatus("登録完了。スキャンを実行してください。");
+      loadStockList();
     }
   })
   .catch(err => {
