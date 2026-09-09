@@ -1,1171 +1,328 @@
-```html
 <!DOCTYPE html>
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-  <title>在庫管理 Ver.2.1</title>
+  <title>在庫管理</title>
 
   <script src="https://unpkg.com/html5-qrcode"></script>
 
   <style>
-
     body {
       font-family: sans-serif;
-      max-width: 650px;
-      margin: 0 auto;
+      max-width: 600px;
+      margin: auto;
       padding: 20px;
-      background: #f7f7f7;
+      background-color: #f9f9f9;
     }
 
-    h1 {
-      margin-bottom: 5px;
+    .mode-container {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 15px;
     }
 
-    h2 {
-      margin-top: 25px;
+    .mode-btn {
+      flex: 1;
+      padding: 12px;
+      font-size: 16px;
+      font-weight: bold;
+      border: 2px solid #ccc;
+      background: #fff;
+      cursor: pointer;
+      border-radius: 6px;
     }
 
-    .version {
-      color: #666;
-      margin-bottom: 20px;
+    .mode-btn.active-in {
+      background: #e6f4ea;
+      border-color: #34a853;
+      color: #137333;
     }
 
-    .box {
-      background: white;
-      padding: 15px;
-      margin: 15px 0;
-      border-radius: 10px;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+    .mode-btn.active-out {
+      background: #fce8e6;
+      border-color: #ea4335;
+      color: #c5221f;
     }
 
-    input,
-    button {
-      font-size: 18px;
+    input, button {
+      font-size: 16px;
       padding: 10px;
       margin: 5px 0;
-      border-radius: 6px;
-      box-sizing: border-box;
+      border-radius: 4px;
     }
 
     input {
-      width: 100%;
-      border: 1px solid #bbb;
+      width: 90%;
+      border: 1px solid #ccc;
     }
 
-    button {
-      border: 1px solid #999;
-      background: white;
+    .btn-main {
+      width: 100%;
+      background: #1a73e8;
+      color: white;
+      border: none;
       cursor: pointer;
-    }
-
-    button:active {
-      transform: scale(0.98);
-    }
-
-    .main-button {
-      width: 100%;
-      font-size: 20px;
-      padding: 14px;
-    }
-
-    #reader {
-      width: 100%;
-      margin-top: 15px;
-    }
-
-    #status {
-      padding: 12px;
-      margin: 10px 0;
-      background: #eee;
-      border-radius: 8px;
-      white-space: pre-wrap;
+      font-weight: bold;
     }
 
     .product {
-      background: white;
       border: 1px solid #ccc;
-      padding: 14px;
+      padding: 12px;
       margin: 10px 0;
-      border-radius: 10px;
+      border-radius: 8px;
+      background: #fff;
     }
 
-    .product-name {
-      font-size: 20px;
+    #status {
+      margin: 10px 0;
       font-weight: bold;
+      padding: 8px;
+      border-radius: 4px;
     }
 
-    .small {
-      font-size: 14px;
-      color: #666;
+    .status-ok { background: #e6f4ea; color: #137333; }
+    .status-warn { background: #fce8e6; color: #c5221f; }
+    
+    #reg-box {
+      border: 2px solid #1a73e8;
+      background: #e8f0fe;
+      padding: 15px;
+      border-radius: 8px;
+      margin: 15px 0;
     }
-
-    .stock {
-      font-size: 22px;
-      font-weight: bold;
-      margin: 8px 0;
-    }
-
-    .button-row {
-      display: flex;
-      gap: 5px;
-      flex-wrap: wrap;
-    }
-
-    .button-row button {
-      flex: 1;
-      min-width: 80px;
-    }
-
-    .danger {
-      color: #b00000;
-    }
-
-    .master-count {
-      font-size: 18px;
-      font-weight: bold;
-    }
-
-    .hidden {
-      display: none;
-    }
-
   </style>
-
 </head>
-
 
 <body>
 
-  <h1>📦 在庫管理</h1>
+<h1>📦 在庫管理スキャナー</h1>
 
-  <div class="version">
-    在庫管理 Ver.2.1
-  </div>
+<!-- モード切り替え -->
+<div class="mode-container">
+  <button id="btn-in" class="mode-btn active-in" onclick="setMode('in')">📥 入庫 (+1)</button>
+  <button id="btn-out" class="mode-btn" onclick="setMode('out')">📤 出庫 (-1)</button>
+</div>
 
+<button class="btn-main" onclick="startScanner()">📷 バーコードを読み取る</button>
 
-  <!-- =========================================
-       バーコード読み取り
-  ========================================== -->
+<div id="reader" style="width:100%; margin-top:15px;"></div>
 
-  <div class="box">
+<div id="status"></div>
 
-    <button
-      class="main-button"
-      onclick="startScanner()"
-    >
-      📷 バーコードを読み取る
-    </button>
+<!-- 辞書未登録時の登録フォーム -->
+<div id="reg-box" style="display:none;">
+  <h3>⚠️ 辞書未登録の商品です</h3>
+  <p>バーコード: <strong id="target-barcode"></strong></p>
+  <label>商品名を入力して辞書登録してください</label><br>
+  <input id="reg-name" placeholder="例: お茶 500ml"><br>
+  <button class="btn-main" onclick="registerProduct()">辞書に保存</button>
+</div>
 
-    <div id="reader"></div>
+<hr>
 
-    <div id="status">
-      待機中
-    </div>
+<h2>商品一覧（クラウド同期）</h2>
+<button onclick="loadStockList()" style="width:100%;">🔄 在庫一覧を更新</button>
 
-  </div>
-
-
-  <!-- =========================================
-       商品登録
-  ========================================== -->
-
-  <div class="box">
-
-    <h2>📝 商品登録</h2>
-
-    <label>
-      JANコード
-    </label>
-
-    <input
-      id="barcode"
-      placeholder="JANコード"
-    >
-
-
-    <label>
-      商品名
-    </label>
-
-    <input
-      id="name"
-      placeholder="商品名"
-    >
-
-
-    <label>
-      メーカー
-    </label>
-
-    <input
-      id="maker"
-      placeholder="例：ライオン"
-    >
-
-
-    <label>
-      ブランド・シリーズ
-    </label>
-
-    <input
-      id="brand"
-      placeholder="例：アロマリッチ"
-    >
-
-
-    <label>
-      容量・規格
-    </label>
-
-    <input
-      id="size"
-      placeholder="例：2000mL"
-    >
-
-
-    <label>
-      在庫数
-    </label>
-
-    <input
-      id="stock"
-      type="number"
-      value="1"
-      min="0"
-    >
-
-
-    <button
-      class="main-button"
-      onclick="addProduct()"
-    >
-      ➕ 商品を登録
-    </button>
-
-  </div>
-
-
-  <!-- =========================================
-       在庫一覧
-  ========================================== -->
-
-  <div class="box">
-
-    <h2>📦 在庫一覧</h2>
-
-    <div id="list"></div>
-
-  </div>
-
-
-  <!-- =========================================
-       商品マスター
-  ========================================== -->
-
-  <div class="box">
-
-    <h2>📚 商品マスター</h2>
-
-    <div
-      id="masterCount"
-      class="master-count"
-    >
-      商品マスター：0件
-    </div>
-
-    <p class="small">
-      登録したJANコードと商品情報を覚えます。
-      同じJANを次回読み取ると自動で商品名などを表示します。
-    </p>
-
-  </div>
-
-
+<div id="list"></div>
 
 <script>
 
-
-/*
-==================================================
-在庫管理 Ver.2.1
-==================================================
-
-【今回の機能】
-
-・バーコード読み取り
-・JANコードによる商品検索
-・商品マスター
-・メーカー
-・ブランド/シリーズ
-・容量/規格
-・在庫管理
-・同じJANなら在庫加算
-・ブラウザにデータ保存
-
-==================================================
-*/
-
+// ★取得したGASのWebアプリURLを以下に貼り付けてください
+const GAS_URL = "https://script.google.com/macros/s/AKfycbxIY1NMn3ry3EOdP4olMb7d0SIJx2nr58l25k7u7J-ZfpRUZfy6FbgwAOaVhcaf7qKG/exec";
 
 let scanner = null;
+let currentMode = "in";
+let pendingBarcode = "";
+let isProcessing = false;
 
+// 初期表示時に在庫一覧を取得
+loadStockList();
 
-/*
-==================================================
-在庫データ
-==================================================
-*/
+/* -------------------------
+   モード切り替え
+------------------------- */
+function setMode(mode) {
+  currentMode = mode;
+  document.getElementById("btn-in").className = "mode-btn " + (mode === "in" ? "active-in" : "");
+  document.getElementById("btn-out").className = "mode-btn " + (mode === "out" ? "active-out" : "");
+}
 
-let products =
-  JSON.parse(
-    localStorage.getItem("products")
-  ) || [];
+/* -------------------------
+   ステータス表示
+------------------------- */
+function setStatus(text, isError = false) {
+  const status = document.getElementById("status");
+  status.textContent = text;
+  status.className = isError ? "status-warn" : "status-ok";
+}
 
-
-/*
-==================================================
-商品マスター
-==================================================
-*/
-
-let productMaster =
-  JSON.parse(
-    localStorage.getItem("productMaster")
-  ) || [];
-
-
-/*
-==================================================
-初期表示
-==================================================
-*/
-
-displayProducts();
-
-displayMasterCount();
-
-
-
-/*
-==================================================
-バーコード読み取り開始
-==================================================
-*/
-
+/* -------------------------
+   バーコード読み取り（カメラ）
+------------------------- */
 function startScanner() {
+  if (scanner) return;
 
-
-  if (scanner) {
-
-    return;
-
-  }
-
-
-  document.getElementById("status").textContent =
-    "📷 カメラ起動中…";
-
-
-  scanner =
-    new Html5Qrcode("reader");
-
+  document.getElementById("reg-box").style.display = "none";
+  scanner = new Html5Qrcode("reader");
 
   scanner.start(
-
-    {
-      facingMode: "environment"
-    },
-
+    { facingMode: "environment" },
     {
       fps: 10,
-
-      qrbox: {
-        width: 280,
-        height: 150
-      }
-
+      qrbox: { width: 280, height: 150 }
     },
+    async (decodedText) => {
+      if (isProcessing) return;
+      isProcessing = true;
 
+      setStatus("⏳ 処理中...: " + decodedText);
 
-    function(decodedText) {
+      // カメラを自動停止
+      await stopScanner();
 
-
-      /*
-      JANコードを入力欄へ
-      */
-
-      document.getElementById("barcode").value =
-        decodedText;
-
-
-      /*
-      カメラ停止
-      */
-
-      stopScanner();
-
-
-      /*
-      商品検索
-      */
-
-      lookupProduct(decodedText);
-
+      // GASへ通信して処理（辞書照会・自動増減）
+      handleScan(decodedText);
     },
-
-
-    function(errorMessage) {
-
-      /*
-      読み取り途中のエラーは無視
-      */
-
-    }
-
-  ).catch(function(error) {
-
-
-    document.getElementById("status").textContent =
-      "❌ カメラを起動できませんでした";
-
-
+    () => {}
+  ).catch(error => {
+    alert("カメラを起動できませんでした。\n" + error);
     scanner = null;
-
-
-    console.log(error);
-
   });
-
 }
-
-
-
-/*
-==================================================
-カメラ停止
-==================================================
-*/
 
 async function stopScanner() {
-
-
-  if (!scanner) {
-
-    return;
-
-  }
-
-
-  const currentScanner =
-    scanner;
-
-
-  scanner = null;
-
-
+  if (!scanner) return;
   try {
-
-
-    await currentScanner.stop();
-
-
-    currentScanner.clear();
-
-
-  } catch (error) {
-
-
-    console.log(
-      "カメラ停止エラー:",
-      error
-    );
-
+    await scanner.stop();
+    scanner.clear();
+  } catch (e) {
+    console.log(e);
   }
-
+  scanner = null;
 }
 
-
-
-/*
-==================================================
-商品検索
-==================================================
-*/
-
-async function lookupProduct(barcode) {
-
-
-  const status =
-    document.getElementById("status");
-
-
-  /*
-  -----------------------------------------------
-  ① 自分の商品マスターを検索
-  -----------------------------------------------
-  */
-
-  const localProduct =
-    productMaster.find(
-      product =>
-        product.barcode === barcode
-    );
-
-
-  if (localProduct) {
-
-
-    document.getElementById("name").value =
-      localProduct.name || "";
-
-
-    document.getElementById("maker").value =
-      localProduct.maker || "";
-
-
-    document.getElementById("brand").value =
-      localProduct.brand || "";
-
-
-    document.getElementById("size").value =
-      localProduct.size || "";
-
-
-    status.textContent =
-      "✅ 商品マスターから自動取得しました\n\n"
-      + localProduct.name;
-
-
-    return;
-
-  }
-
-
-  /*
-  -----------------------------------------------
-  ② 商品マスターにない新商品
-  -----------------------------------------------
-  */
-
-  status.textContent =
-    "🆕 新しい商品です\n"
-    + "商品情報を入力して登録してください";
-
-
-  /*
-  入力欄を空にする
-  */
-
-  document.getElementById("name").value =
-    "";
-
-
-  document.getElementById("maker").value =
-    "";
-
-
-  document.getElementById("brand").value =
-    "";
-
-
-  document.getElementById("size").value =
-    "";
-
-
-  /*
-  商品名入力欄へ移動
-  */
-
-  document.getElementById("name").focus();
-
-}
-
-
-
-/*
-==================================================
-商品登録
-==================================================
-*/
-
-function addProduct() {
-
-
-  const barcode =
-    document
-      .getElementById("barcode")
-      .value
-      .trim();
-
-
-  const name =
-    document
-      .getElementById("name")
-      .value
-      .trim();
-
-
-  const maker =
-    document
-      .getElementById("maker")
-      .value
-      .trim();
-
-
-  const brand =
-    document
-      .getElementById("brand")
-      .value
-      .trim();
-
-
-  const size =
-    document
-      .getElementById("size")
-      .value
-      .trim();
-
-
-  const stock =
-    Number(
-      document
-        .getElementById("stock")
-        .value
-    );
-
-
-  /*
-  -----------------------------------------------
-  入力チェック
-  -----------------------------------------------
-  */
-
-  if (!barcode) {
-
-
-    alert(
-      "JANコードを入力してください"
-    );
-
-
-    return;
-
-  }
-
-
-  if (!name) {
-
-
-    alert(
-      "商品名を入力してください"
-    );
-
-
-    return;
-
-  }
-
-
-  if (stock < 0) {
-
-
-    alert(
-      "在庫数が正しくありません"
-    );
-
-
-    return;
-
-  }
-
-
-  /*
-  -----------------------------------------------
-  商品マスターへ登録
-  -----------------------------------------------
-  */
-
-  const masterIndex =
-    productMaster.findIndex(
-      product =>
-        product.barcode === barcode
-    );
-
-
-  if (masterIndex >= 0) {
-
-
-    /*
-    既存商品の情報を更新
-    */
-
-    productMaster[masterIndex] = {
-
+/* -------------------------
+   スキャン後のGAS連携処理
+------------------------- */
+function handleScan(barcode) {
+  fetch(GAS_URL, {
+    method: "POST",
+    body: JSON.stringify({
+      action: "scan",
       barcode: barcode,
-
-      name: name,
-
-      maker: maker,
-
-      brand: brand,
-
-      size: size
-
-    };
-
-
-  } else {
-
-
-    /*
-    新商品を登録
-    */
-
-    productMaster.push({
-
-      barcode: barcode,
-
-      name: name,
-
-      maker: maker,
-
-      brand: brand,
-
-      size: size
-
-    });
-
-  }
-
-
-  /*
-  商品マスター保存
-  */
-
-  saveMaster();
-
-
-  /*
-  -----------------------------------------------
-  在庫へ登録
-  -----------------------------------------------
-  */
-
-  const existing =
-    products.find(
-      product =>
-        product.barcode === barcode
-    );
-
-
-  if (existing) {
-
-
-    /*
-    同じJANなら在庫だけ増やす
-    */
-
-    existing.stock += stock;
-
-
-    /*
-    商品情報も更新
-    */
-
-    existing.name =
-      name;
-
-    existing.maker =
-      maker;
-
-    existing.brand =
-      brand;
-
-    existing.size =
-      size;
-
-
-  } else {
-
-
-    /*
-    新しい在庫商品
-    */
-
-    products.push({
-
-      barcode: barcode,
-
-      name: name,
-
-      maker: maker,
-
-      brand: brand,
-
-      size: size,
-
-      stock: stock
-
-    });
-
-  }
-
-
-  /*
-  保存
-  */
-
-  saveProducts();
-
-
-  /*
-  表示更新
-  */
-
-  displayProducts();
-
-  displayMasterCount();
-
-
-  /*
-  入力欄リセット
-  */
-
-  clearForm();
-
-
-  /*
-  完了表示
-  */
-
-  document.getElementById("status").textContent =
-    "✅ 商品を登録しました";
-
-}
-
-
-
-/*
-==================================================
-商品マスター保存
-==================================================
-*/
-
-function saveMaster() {
-
-
-  localStorage.setItem(
-    "productMaster",
-    JSON.stringify(productMaster)
-  );
-
-}
-
-
-
-/*
-==================================================
-在庫保存
-==================================================
-*/
-
-function saveProducts() {
-
-
-  localStorage.setItem(
-    "products",
-    JSON.stringify(products)
-  );
-
-}
-
-
-
-/*
-==================================================
-フォームを空にする
-==================================================
-*/
-
-function clearForm() {
-
-
-  document.getElementById("barcode").value =
-    "";
-
-
-  document.getElementById("name").value =
-    "";
-
-
-  document.getElementById("maker").value =
-    "";
-
-
-  document.getElementById("brand").value =
-    "";
-
-
-  document.getElementById("size").value =
-    "";
-
-
-  document.getElementById("stock").value =
-    1;
-
-}
-
-
-
-/*
-==================================================
-在庫数変更
-==================================================
-*/
-
-function changeStock(
-  index,
-  amount
-) {
-
-
-  products[index].stock +=
-    amount;
-
-
-  if (
-    products[index].stock < 0
-  ) {
-
-
-    products[index].stock =
-      0;
-
-  }
-
-
-  saveProducts();
-
-
-  displayProducts();
-
-}
-
-
-
-/*
-==================================================
-商品削除
-==================================================
-*/
-
-function deleteProduct(index) {
-
-
-  const product =
-    products[index];
-
-
-  if (
-    !confirm(
-      product.name
-      + "\n\nこの商品を在庫一覧から削除しますか？"
-    )
-  ) {
-
-
-    return;
-
-  }
-
-
-  products.splice(
-    index,
-    1
-  );
-
-
-  saveProducts();
-
-
-  displayProducts();
-
-}
-
-
-
-/*
-==================================================
-在庫一覧表示
-==================================================
-*/
-
-function displayProducts() {
-
-
-  const list =
-    document.getElementById("list");
-
-
-  list.innerHTML =
-    "";
-
-
-  if (
-    products.length === 0
-  ) {
-
-
-    list.innerHTML =
-      "<p>まだ商品がありません。</p>";
-
-
-    return;
-
-  }
-
-
-  products.forEach(
-    function(product, index) {
-
-
-      const div =
-        document.createElement("div");
-
-
-      div.className =
-        "product";
-
-
-      div.innerHTML = `
-
-        <div class="product-name">
-          ${escapeHtml(product.name)}
-        </div>
-
-        <div class="small">
-          JAN：
-          ${escapeHtml(product.barcode)}
-        </div>
-
-        ${
-          product.maker
-          ? `
-            <div class="small">
-              メーカー：
-              ${escapeHtml(product.maker)}
-            </div>
-          `
-          : ""
-        }
-
-        ${
-          product.brand
-          ? `
-            <div class="small">
-              ブランド：
-              ${escapeHtml(product.brand)}
-            </div>
-          `
-          : ""
-        }
-
-        ${
-          product.size
-          ? `
-            <div class="small">
-              容量・規格：
-              ${escapeHtml(product.size)}
-            </div>
-          `
-          : ""
-        }
-
-        <div class="stock">
-          在庫：
-          ${product.stock}
-          個
-        </div>
-
-        <div class="button-row">
-
-          <button
-            onclick="changeStock(${index}, 1)"
-          >
-            ＋1
-          </button>
-
-          <button
-            onclick="changeStock(${index}, -1)"
-          >
-            −1
-          </button>
-
-          <button
-            class="danger"
-            onclick="deleteProduct(${index})"
-          >
-            削除
-          </button>
-
-        </div>
-
-      `;
-
-
-      list.appendChild(div);
-
+      mode: currentMode
+    })
+  })
+  .then(res => res.json())
+  .then(data => {
+    isProcessing = false;
+    if (data.success) {
+      const actionText = data.mode === "in" ? "【入庫 +1】" : "【出庫 -1】";
+      setStatus(`✅ ${actionText} ${data.name}（現在の在庫: ${data.stock}個）`);
+      loadStockList();
+    } else if (data.reason === "not_found") {
+      setStatus("⚠️ 辞書未登録のバーコードです。下記から登録してください。", true);
+      pendingBarcode = data.barcode;
+      document.getElementById("target-barcode").textContent = pendingBarcode;
+      document.getElementById("reg-box").style.display = "block";
     }
-  );
-
+  })
+  .catch(err => {
+    isProcessing = false;
+    console.error(err);
+    setStatus("❌ 通信エラーが発生しました", true);
+  });
 }
 
+/* -------------------------
+   辞書への新規登録処理
+------------------------- */
+function registerProduct() {
+  const name = document.getElementById("reg-name").value.trim();
+  if (!name) {
+    alert("商品名を入力してください");
+    return;
+  }
 
+  setStatus("⏳ 辞書に登録中…");
 
-/*
-==================================================
-商品マスター件数
-==================================================
-*/
-
-function displayMasterCount() {
-
-
-  document.getElementById(
-    "masterCount"
-  ).textContent =
-    "商品マスター："
-    + productMaster.length
-    + "件";
-
+  fetch(GAS_URL, {
+    method: "POST",
+    body: JSON.stringify({
+      action: "register",
+      barcode: pendingBarcode,
+      name: name
+    })
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.success) {
+      alert("✅ 辞書に登録しました！もう一度バーコードを読み取ってください。");
+      document.getElementById("reg-box").style.display = "none";
+      document.getElementById("reg-name").value = "";
+      setStatus("登録完了。スキャンを実行してください。");
+    }
+  })
+  .catch(err => {
+    console.error(err);
+    setStatus("❌ 登録エラーが発生しました", true);
+  });
 }
 
+/* -------------------------
+   在庫一覧の取得（スプレッドシートから）
+------------------------- */
+function loadStockList() {
+  const list = document.getElementById("list");
+  
+  fetch(GAS_URL + "?action=getAll")
+  .then(res => res.json())
+  .then(data => {
+    if (data.success) {
+      displayProducts(data.items);
+    }
+  })
+  .catch(err => {
+    console.error(err);
+    list.innerHTML = "<p>在庫データの取得に失敗しました</p>";
+  });
+}
 
+/* -------------------------
+   一覧表示レンダリング
+------------------------- */
+function displayProducts(products) {
+  const list = document.getElementById("list");
+  list.innerHTML = "";
 
-/*
-==================================================
-HTMLエスケープ
-==================================================
-*/
+  if (!products || products.length === 0) {
+    list.innerHTML = "<p>まだ在庫データがありません。</p>";
+    return;
+  }
 
+  products.forEach(product => {
+    const div = document.createElement("div");
+    div.className = "product";
+    div.innerHTML = `
+      <strong>${escapeHtml(product.name)}</strong><br>
+      JAN：${escapeHtml(product.barcode)}<br>
+      在庫：<strong>${product.stock}</strong>個
+    `;
+    list.appendChild(div);
+  });
+}
+
+/* -------------------------
+   HTMLエスケープ
+------------------------- */
 function escapeHtml(text) {
-
-
-  const div =
-    document.createElement("div");
-
-
-  div.textContent =
-    text || "";
-
-
+  const div = document.createElement("div");
+  div.textContent = text;
   return div.innerHTML;
-
 }
 
 </script>
 
 </body>
 </html>
-```
