@@ -61,15 +61,17 @@
     <video id="video" playsinline></video>
   </div>
 
+  <!-- 操作ボタン -->
+  <div class="btn-group">
+    <button id="cameraToggleBtn" class="btn" onclick="toggleCamera()" style="background:#2c3e50;">カメラ起動</button>
+    <button class="btn" onclick="fetchStockList()">在庫一覧を更新</button>
+  </div>
+
   <!-- ステータス表示 -->
   <div class="status-panel">
     <div>モード: <span id="currentModeDisplay" style="color:#27ae60;">入庫</span></div>
     <div>最終読み取り: <span id="lastBarcode">なし</span></div>
     <div id="resultMessage" style="margin-top:5px; font-weight:bold;"></div>
-  </div>
-
-  <div class="btn-group">
-    <button class="btn" onclick="fetchStockList()">在庫一覧を更新</button>
   </div>
 
   <!-- 在庫一覧表示エリア -->
@@ -89,17 +91,17 @@
 </div>
 
 <script>
-  // ★ここにご自身のGAS WebアプリURLを設定してください
+  // ★ご自身のGAS WebアプリURLを設定してください
   const GAS_URL = "https://script.google.com/macros/s/AKfycbxIY1NMn3ry3EOdP4olMb7d0SIJx2nr58l25k7u7J-ZfpRUZfy6FbgwAOaVhcaf7qKG/exec";
 
   let currentMode = "in";
   let codeReader = null;
+  let isScanning = false;
   let isProcessing = false;
   let currentUnregisteredBarcode = "";
 
   window.addEventListener('load', () => {
-    initScanner();
-    fetchStockList();
+    fetchStockList(); // 画面読み込み時は在庫一覧の取得のみ行い、カメラは起動しません
   });
 
   function setMode(mode) {
@@ -111,8 +113,16 @@
     display.style.color = mode === 'in' ? '#27ae60' : '#e74c3c';
   }
 
-  // バーコードスキャナ初期化
-  function initScanner() {
+  // カメラ起動 / 停止の切替
+  function toggleCamera() {
+    if (isScanning) {
+      stopScanner();
+    } else {
+      startScanner();
+    }
+  }
+
+  function startScanner() {
     codeReader = new ZXing.BrowserMultiFormatReader();
     codeReader.decodeFromVideoDevice(null, 'video', (result, err) => {
       if (result && !isProcessing) {
@@ -121,7 +131,24 @@
         document.getElementById('lastBarcode').innerText = barcode;
         handleScan(barcode);
       }
-    }).catch(err => console.error(err));
+    }).then(() => {
+      isScanning = true;
+      document.getElementById('cameraToggleBtn').innerText = "カメラ停止";
+      document.getElementById('cameraToggleBtn').style.background = "#7f8c8d";
+    }).catch(err => {
+      console.error(err);
+      alert("カメラの起動に失敗しました");
+    });
+  }
+
+  function stopScanner() {
+    if (codeReader) {
+      codeReader.reset();
+      codeReader = null;
+    }
+    isScanning = false;
+    document.getElementById('cameraToggleBtn').innerText = "カメラ起動";
+    document.getElementById('cameraToggleBtn').style.background = "#2c3e50";
   }
 
   // スキャン時の処理
@@ -145,10 +172,9 @@
         const msg = `【${data.name}】在庫: ${data.stock} (${data.mode === 'in' ? '+1' : '-1'})`;
         document.getElementById('resultMessage').innerText = msg;
         document.getElementById('resultMessage').style.color = "#27ae60";
-        fetchStockList(); // 在庫一覧を再取得
-        setTimeout(() => { isProcessing = false; }, 2000); // 連打防止（2秒待機）
+        fetchStockList();
+        setTimeout(() => { isProcessing = false; }, 2000);
       } else if (data.reason === "not_found") {
-        // 辞書未登録の場合
         currentUnregisteredBarcode = barcode;
         document.getElementById('modalBarcode').innerText = barcode;
         document.getElementById('modalProductName').value = "";
@@ -203,7 +229,7 @@
     });
   }
 
-  // 在庫一覧の取得と描画 (JANコード非表示・商品名と在庫数のみ)
+  // 在庫一覧の取得と描画
   function fetchStockList() {
     fetch(GAS_URL)
       .then(res => res.json())
