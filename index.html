@@ -25,6 +25,33 @@
     #interactive { width: 100%; height: 220px; background: #000; border-radius: 8px; overflow: hidden; position: relative; margin-bottom: 15px; }
     #interactive video { width: 100%; height: 100%; object-fit: cover; }
     
+    /* スキャンエリア指定用のオーバーレイ（赤枠と薄暗いガイド） */
+    .scan-guide {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      pointer-events: none;
+    }
+    .scan-guide-box {
+      width: 70%;
+      height: 45%;
+      border: 2px solid #e74c3c;
+      border-radius: 8px;
+      box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.3);
+      position: relative;
+    }
+    .scan-guide-line {
+      position: absolute;
+      top: 50%;
+      left: 5%;
+      width: 90%;
+      height: 2px;
+      background: rgba(231, 76, 60, 0.7);
+      transform: translateY(-50%);
+    }
+
     .status-panel { padding: 12px; background: #eef2f5; border-radius: 8px; margin-bottom: 15px; text-align: center; font-size: 0.95rem; }
     .status-panel span { font-weight: bold; }
 
@@ -37,6 +64,10 @@
     .modal-content { background: #fff; padding: 20px; border-radius: 12px; width: 85%; max-width: 400px; }
     .modal-content h3 { margin-bottom: 10px; font-size: 1.1rem; }
     .modal-content input { width: 100%; padding: 10px; margin: 10px 0 15px; border: 1px solid #ccc; border-radius: 6px; font-size: 1rem; }
+
+    /* モーダル内ボタンレイアウト */
+    .modal-btn-group { display: flex; gap: 10px; }
+    .modal-btn-cancel { background: #95a5a6; }
 
     /* 在庫一覧表示 */
     .stock-list { margin-top: 15px; border-top: 1px solid #eee; padding-top: 15px; }
@@ -59,6 +90,12 @@
   <!-- カメラ描画エリア -->
   <div id="interactive">
     <video id="video" playsinline></video>
+    <!-- 赤枠ガイドを追加 -->
+    <div class="scan-guide">
+      <div class="scan-guide-box">
+        <div class="scan-guide-line"></div>
+      </div>
+    </div>
   </div>
 
   <!-- 操作ボタン -->
@@ -86,7 +123,10 @@
     <h3>未登録のバーコードです</h3>
     <p>JAN: <span id="modalBarcode"></span></p>
     <input type="text" id="modalProductName" placeholder="商品名を入力してください">
-    <button class="btn" onclick="submitNewProduct()" style="width:100%;">登録して在庫更新</button>
+    <div class="modal-btn-group">
+      <button class="btn modal-btn-cancel" onclick="cancelRegistration()">キャンセル</button>
+      <button class="btn" onclick="submitNewProduct()">登録して在庫更新</button>
+    </div>
   </div>
 </div>
 
@@ -122,40 +162,72 @@
     }
   }
 
+  // バーコードの検出位置が中央の赤枠内にあるか判定する関数
+  function isResultInGuideBox(result, videoElem) {
+    if (!result.resultPoints || result.resultPoints.length === 0) return true;
+
+    const videoWidth = videoElem.videoWidth || videoElem.clientWidth;
+    const videoHeight = videoElem.videoHeight || videoElem.clientHeight;
+    if (!videoWidth || !videoHeight) return true;
+
+    // ガイド枠の比率（幅70%、高さ45%）
+    const boxWidthRatio = 0.70;
+    const boxHeightRatio = 0.45;
+
+    const minX = videoWidth * (1 - boxWidthRatio) / 2;
+    const maxX = videoWidth * (1 + boxWidthRatio) / 2;
+    const minY = videoHeight * (1 - boxHeightRatio) / 2;
+    const maxY = videoHeight * (1 + boxHeightRatio) / 2;
+
+    // 検出されたすべての点が枠内に収まっているかチェック
+    return result.resultPoints.every(point => {
+      const x = point.x;
+      const y = point.y;
+      return x >= minX && x <= maxX && y >= minY && y <= maxY;
+    });
+  }
+
   // カメラ起動処理（背面カメラ優先指定）
   function startScanner() {
     codeReader = new ZXing.BrowserMultiFormatReader();
     
-    // 背面カメラ（environment）を明示指定
     const constraints = {
       video: { facingMode: { exact: "environment" } }
     };
 
+    const videoElem = document.getElementById('video');
+
     codeReader.decodeFromVideoDevice(undefined, 'video', (result, err) => {
       if (result && !isProcessing) {
-        isProcessing = true;
-        const barcode = result.text;
-        document.getElementById('lastBarcode').innerText = barcode;
-        handleScan(barcode);
+        // 赤枠の中に入っている場合のみ読み取る
+        if (isResultInGuideBox(result, videoElem)) {
+          isProcessing = true;
+          const barcode = result.text;
+          document.getElementById('lastBarcode').innerText = barcode;
+          handleScan(barcode);
+        }
       }
     }, constraints).then(() => {
       isScanning = true;
       document.getElementById('cameraToggleBtn').innerText = "カメラ停止";
       document.getElementById('cameraToggleBtn').style.background = "#7f8c8d";
     }).catch(err => {
-      // exact指定でエラーが出る端末向けのフォールバック処理
       fallbackScanner();
     });
   }
 
   // 予備の起動処理
   function fallbackScanner() {
+    const videoElem = document.getElementById('video');
+
     codeReader.decodeFromVideoDevice(null, 'video', (result, err) => {
       if (result && !isProcessing) {
-        isProcessing = true;
-        const barcode = result.text;
-        document.getElementById('lastBarcode').innerText = barcode;
-        handleScan(barcode);
+        if (isResultInGuideBox(result, videoElem)) {
+          isProcessing = true;
+          const barcode = result.text;
+          document.getElementById('lastBarcode').innerText = barcode;
+          handleScan(barcode);
+        }
       }
     }).then(() => {
       isScanning = true;
@@ -210,6 +282,16 @@
       document.getElementById('resultMessage').style.color = "#e74c3c";
       setTimeout(() => { isProcessing = false; }, 2000);
     });
+  }
+
+  // 未登録ダイアログのキャンセル処理
+  function cancelRegistration() {
+    document.getElementById('registerModal').style.display = "none";
+    document.getElementById('resultMessage').innerText = "スキャンをキャンセルしました";
+    document.getElementById('resultMessage').style.color = "#7f8c8d";
+    currentUnregisteredBarcode = "";
+    // 次のスキャンを受け付けられるように復帰
+    setTimeout(() => { isProcessing = false; }, 1000);
   }
 
   // 未登録商品の新規登録＆更新送信
