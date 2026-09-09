@@ -81,7 +81,6 @@
       background: #f39c12;
       color: #fff;
       box-shadow: 0 0 0 2px #e67e22;
-      animation: pulse 1.5s infinite;
     }
   </style>
 </head>
@@ -153,7 +152,6 @@
 </div>
 
 <script>
-  // ★ご自身のGAS WebアプリURLを設定してください
   const GAS_URL = "https://script.google.com/macros/s/AKfycbxIY1NMn3ry3EOdP4olMb7d0SIJx2nr58l25k7u7J-ZfpRUZfy6FbgwAOaVhcaf7qKG/exec";
 
   let currentMode = "in";
@@ -177,7 +175,6 @@
     display.style.color = mode === 'in' ? '#27ae60' : '#e74c3c';
   }
 
-  // カメラ起動 / 停止の切替
   function toggleCamera() {
     if (isScanning) {
       stopScanner();
@@ -186,7 +183,6 @@
     }
   }
 
-  // バーコードの検出位置が中央の赤枠内にあるか判定する関数
   function isResultInGuideBox(result, videoElem) {
     if (!result.resultPoints || result.resultPoints.length === 0) return true;
 
@@ -209,21 +205,16 @@
     });
   }
 
-  // カメラ起動処理（背面カメラ優先指定）
   function startScanner() {
     codeReader = new ZXing.BrowserMultiFormatReader();
-    
-    const constraints = {
-      video: { facingMode: { exact: "environment" } }
-    };
-
+    const constraints = { video: { facingMode: { exact: "environment" } } };
     const videoElem = document.getElementById('video');
 
     codeReader.decodeFromVideoDevice(undefined, 'video', (result, err) => {
       if (result && !isProcessing) {
         if (isResultInGuideBox(result, videoElem)) {
           isProcessing = true;
-          const barcode = result.text;
+          const barcode = String(result.text).trim();
           document.getElementById('lastBarcode').innerText = barcode;
           handleScan(barcode);
         }
@@ -237,15 +228,13 @@
     });
   }
 
-  // 予備の起動処理
   function fallbackScanner() {
     const videoElem = document.getElementById('video');
-
     codeReader.decodeFromVideoDevice(null, 'video', (result, err) => {
       if (result && !isProcessing) {
         if (isResultInGuideBox(result, videoElem)) {
           isProcessing = true;
-          const barcode = result.text;
+          const barcode = String(result.text).trim();
           document.getElementById('lastBarcode').innerText = barcode;
           handleScan(barcode);
         }
@@ -254,7 +243,7 @@
       isScanning = true;
       document.getElementById('cameraToggleBtn').innerText = "カメラ停止";
       document.getElementById('cameraToggleBtn').style.background = "#7f8c8d";
-    }).catch(e => alert("カメラの起動に失敗しました。アクセス権限を確認してください。"));
+    }).catch(e => alert("カメラの起動に失敗しました。"));
   }
 
   function stopScanner() {
@@ -267,7 +256,6 @@
     document.getElementById('cameraToggleBtn').style.background = "#2c3e50";
   }
 
-  // スキャン時の処理
   function handleScan(barcode) {
     document.getElementById('resultMessage').innerText = "スプシ同期中...";
     document.getElementById('resultMessage').style.color = "#7f8c8d";
@@ -278,7 +266,7 @@
       headers: { "Content-Type": "text/plain" },
       body: JSON.stringify({
         action: "scan",
-        barcode: barcode,
+        barcode: String(barcode),
         mode: currentMode
       })
     })
@@ -291,7 +279,7 @@
         fetchStockList();
         setTimeout(() => { isProcessing = false; }, 2000);
       } else if (data.reason === "not_found") {
-        currentUnregisteredBarcode = barcode;
+        currentUnregisteredBarcode = String(barcode);
         document.getElementById('modalBarcode').innerText = barcode;
         document.getElementById('modalProductName').value = "";
         document.getElementById('registerModal').style.display = "flex";
@@ -305,7 +293,6 @@
     });
   }
 
-  // 未登録ダイアログのキャンセル処理
   function cancelRegistration() {
     document.getElementById('registerModal').style.display = "none";
     document.getElementById('resultMessage').innerText = "スキャンをキャンセルしました";
@@ -314,7 +301,6 @@
     setTimeout(() => { isProcessing = false; }, 1000);
   }
 
-  // 未登録商品の新規登録＆更新送信
   function submitNewProduct() {
     const name = document.getElementById('modalProductName').value.trim();
     if (!name) {
@@ -331,7 +317,7 @@
       headers: { "Content-Type": "text/plain" },
       body: JSON.stringify({
         action: "registerAndScan",
-        barcode: currentUnregisteredBarcode,
+        barcode: String(currentUnregisteredBarcode),
         name: name,
         mode: currentMode
       })
@@ -354,7 +340,6 @@
     });
   }
 
-  // ★ 手動操作モードの切り替え
   function toggleManualEditMode() {
     isManualEditMode = !isManualEditMode;
     const btn = document.getElementById('manualEditBtn');
@@ -374,22 +359,20 @@
     }
   }
 
-  // 手動調整用モーダルを開く
+  // ★修正箇所: JANコードを厳格に文字列型として受け取る
   function openManualEditModal(barcode, name, currentStock) {
-    if (!isManualEditMode) return; // 手動モード時のみ動作
-    targetEditBarcode = barcode;
+    if (!isManualEditMode) return;
+    targetEditBarcode = String(barcode).trim();
     document.getElementById('editProductName').innerText = name;
     document.getElementById('editStockCount').value = currentStock;
     document.getElementById('manualEditModal').style.display = "flex";
   }
 
-  // 手動調整用モーダルを閉じる
   function closeManualEditModal() {
     document.getElementById('manualEditModal').style.display = "none";
     targetEditBarcode = "";
   }
 
-  // 手動調整データをスプレッドシート（GAS）へ送信
   function submitManualStock() {
     const newStock = document.getElementById('editStockCount').value;
     if (newStock === "" || isNaN(newStock) || Number(newStock) < 0) {
@@ -397,6 +380,7 @@
       return;
     }
 
+    const sendBarcode = targetEditBarcode;
     closeManualEditModal();
     document.getElementById('resultMessage').innerText = "個数を更新中...";
     document.getElementById('resultMessage').style.color = "#7f8c8d";
@@ -407,7 +391,7 @@
       headers: { "Content-Type": "text/plain" },
       body: JSON.stringify({
         action: "manualUpdate",
-        barcode: targetEditBarcode,
+        barcode: String(sendBarcode),
         stock: Number(newStock)
       })
     })
@@ -418,7 +402,7 @@
         document.getElementById('resultMessage').style.color = "#27ae60";
         fetchStockList();
       } else {
-        document.getElementById('resultMessage').innerText = "更新に失敗しました";
+        document.getElementById('resultMessage').innerText = "更新に失敗しました: " + (data.error || "商品が見つかりません");
         document.getElementById('resultMessage').style.color = "#e74c3c";
       }
     })
@@ -429,7 +413,7 @@
     });
   }
 
-  // 在庫一覧の取得と描画
+  // ★修正箇所: 一覧出力時にJANコードを文字列で安全に引数に渡す処理
   function fetchStockList() {
     fetch(GAS_URL)
       .then(res => res.json())
@@ -440,9 +424,13 @@
           data.items.forEach(item => {
             const div = document.createElement('div');
             div.className = 'stock-item';
+            
+            const safeBarcode = String(item.barcode).replace(/'/g, "\\'");
+            const safeName = String(item.name).replace(/'/g, "\\'");
+
             div.innerHTML = `
               <span class="name">${item.name}</span>
-              <span class="count" onclick="openManualEditModal('${item.barcode}', '${item.name}', ${item.stock})">${item.stock} 個</span>
+              <span class="count" onclick="openManualEditModal('${safeBarcode}', '${safeName}', ${item.stock})">${item.stock} 個</span>
             `;
             area.appendChild(div);
           });
