@@ -101,7 +101,7 @@
   let currentUnregisteredBarcode = "";
 
   window.addEventListener('load', () => {
-    fetchStockList(); // 画面読み込み時は在庫一覧の取得のみ行い、カメラは起動しません
+    fetchStockList();
   });
 
   function setMode(mode) {
@@ -122,8 +122,34 @@
     }
   }
 
+  // カメラ起動処理（背面カメラ優先指定）
   function startScanner() {
     codeReader = new ZXing.BrowserMultiFormatReader();
+    
+    // 背面カメラ（environment）を明示指定
+    const constraints = {
+      video: { facingMode: { exact: "environment" } }
+    };
+
+    codeReader.decodeFromVideoDevice(undefined, 'video', (result, err) => {
+      if (result && !isProcessing) {
+        isProcessing = true;
+        const barcode = result.text;
+        document.getElementById('lastBarcode').innerText = barcode;
+        handleScan(barcode);
+      }
+    }, constraints).then(() => {
+      isScanning = true;
+      document.getElementById('cameraToggleBtn').innerText = "カメラ停止";
+      document.getElementById('cameraToggleBtn').style.background = "#7f8c8d";
+    }).catch(err => {
+      // exact指定でエラーが出る端末向けのフォールバック処理
+      fallbackScanner();
+    });
+  }
+
+  // 予備の起動処理
+  function fallbackScanner() {
     codeReader.decodeFromVideoDevice(null, 'video', (result, err) => {
       if (result && !isProcessing) {
         isProcessing = true;
@@ -135,10 +161,7 @@
       isScanning = true;
       document.getElementById('cameraToggleBtn').innerText = "カメラ停止";
       document.getElementById('cameraToggleBtn').style.background = "#7f8c8d";
-    }).catch(err => {
-      console.error(err);
-      alert("カメラの起動に失敗しました");
-    });
+    }).catch(e => alert("カメラの起動に失敗しました。アクセス権限を確認してください。"));
   }
 
   function stopScanner() {
